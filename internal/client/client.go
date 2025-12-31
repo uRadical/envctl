@@ -11,7 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"uradical.io/go/envctl/internal/config"
+	"envctl.dev/go/envctl/internal/config"
 )
 
 // Client is an IPC client for communicating with the daemon

@@ -6,7 +6,7 @@ import (
 	"os"
 
 	"github.com/spf13/cobra/doc"
-	"uradical.io/go/envctl/internal/cli"
+	"envctl.dev/go/envctl/internal/cli"
 )
 
 func main() {

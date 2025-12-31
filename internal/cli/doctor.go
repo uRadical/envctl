@@ -10,10 +10,10 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"uradical.io/go/envctl/internal/chain"
-	"uradical.io/go/envctl/internal/client"
-	"uradical.io/go/envctl/internal/config"
-	"uradical.io/go/envctl/internal/crypto"
+	"envctl.dev/go/envctl/internal/chain"
+	"envctl.dev/go/envctl/internal/client"
+	"envctl.dev/go/envctl/internal/config"
+	"envctl.dev/go/envctl/internal/crypto"
 )
 
 func init() {

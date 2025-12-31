@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"uradical.io/go/envctl/internal/crypto"
+	"envctl.dev/go/envctl/internal/crypto"
 )
 
 var (

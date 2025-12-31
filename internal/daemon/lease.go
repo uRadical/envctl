@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"uradical.io/go/envctl/internal/secrets"
+	"envctl.dev/go/envctl/internal/secrets"
 )
 
 // Lease represents an active environment lease with TTL

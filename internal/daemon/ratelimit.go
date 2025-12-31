@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"golang.org/x/time/rate"
-	"uradical.io/go/envctl/internal/protocol"
+	"envctl.dev/go/envctl/internal/protocol"
 )
 
 // RateLimitConfig defines rate limits for P2P messages

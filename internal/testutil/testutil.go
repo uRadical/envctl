@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"uradical.io/go/envctl/internal/chain"
-	"uradical.io/go/envctl/internal/config"
-	"uradical.io/go/envctl/internal/crypto"
+	"envctl.dev/go/envctl/internal/chain"
+	"envctl.dev/go/envctl/internal/config"
+	"envctl.dev/go/envctl/internal/crypto"
 )
 
 // TestIdentity wraps an identity with its test configuration

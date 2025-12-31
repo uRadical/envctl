@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"sync"
 
-	"uradical.io/go/envctl/internal/crypto"
+	"envctl.dev/go/envctl/internal/crypto"
 )
 
 // ValueCache stores decrypted values for operations we can't decrypt ourselves.

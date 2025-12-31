@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	"uradical.io/go/envctl/internal/config"
+	"envctl.dev/go/envctl/internal/config"
 )
 
 func init() {

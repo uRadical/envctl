@@ -13,7 +13,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 
-	"uradical.io/go/envctl/internal/audit"
+	"envctl.dev/go/envctl/internal/audit"
 )
 
 var logCmd = &cobra.Command{

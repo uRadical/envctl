@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"uradical.io/go/envctl/internal/chain"
-	"uradical.io/go/envctl/internal/protocol"
-	"uradical.io/go/envctl/internal/testutil"
+	"envctl.dev/go/envctl/internal/chain"
+	"envctl.dev/go/envctl/internal/protocol"
+	"envctl.dev/go/envctl/internal/testutil"
 )
 
 // TestPeerConnection tests that two peers can connect and complete handshake

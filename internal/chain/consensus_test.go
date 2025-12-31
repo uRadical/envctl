@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"uradical.io/go/envctl/internal/crypto"
+	"envctl.dev/go/envctl/internal/crypto"
 )
 
 // createTestChainWithMembers creates a chain with the specified number of members

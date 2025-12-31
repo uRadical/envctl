@@ -1,0 +1,121 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+version: 2
+
+project_name: envctl
+
+before:
+  hooks:
+    - go mod tidy
+    - go generate ./...
+
+builds:
+  - id: envctl
+    main: ./cmd/envctl
+    binary: envctl
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      # Windows ARM64 is less common, skip for now
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+    flags:
+      - -trimpath
+
+archives:
+  - id: default
+    formats:
+      - tar.gz
+      - zip
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- .Version }}_
+      {{- .Os }}_
+      {{- .Arch }}
+    files:
+      - README.md
+      - LICENSE*
+
+checksum:
+  name_template: 'checksums.txt'
+  algorithm: sha256
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
+      - '^ci:'
+      - Merge pull request
+      - Merge branch
+  groups:
+    - title: Features
+      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      order: 0
+    - title: Bug Fixes
+      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
+      order: 1
+    - title: Security
+      regexp: '^.*?sec(\([[:word:]]+\))??!?:.+$'
+      order: 2
+    - title: Others
+      order: 999
+
+release:
+  github:
+    owner: uradical
+    name: envctl
+  draft: false
+  prerelease: auto
+  name_template: "v{{.Version}}"
+
+# Homebrew tap (optional - uncomment when you have a homebrew-tap repo)
+# brews:
+#   - name: envctl
+#     repository:
+#       owner: uradical
+#       name: homebrew-tap
+#     homepage: "https://envctl.dev"
+#     description: "Zero-infrastructure P2P secrets sharing"
+#     license: "MIT"
+#     folder: Formula
+#     test: |
+#       system "#{bin}/envctl", "version"
+#     install: |
+#       bin.install "envctl"
+
+# Scoop bucket for Windows (optional - uncomment when you have a scoop bucket)
+# scoops:
+#   - repository:
+#       owner: uradical
+#       name: scoop-bucket
+#     homepage: "https://envctl.dev"
+#     description: "Zero-infrastructure P2P secrets sharing"
+#     license: MIT
+
+# Sign the checksums file (optional - requires GPG)
+# signs:
+#   - artifacts: checksum
+#     args:
+#       - "--batch"
+#       - "--local-user"
+#       - "{{ .Env.GPG_FINGERPRINT }}"
+#       - "--output"
+#       - "${signature}"
+#       - "--detach-sign"
+#       - "${artifact}"

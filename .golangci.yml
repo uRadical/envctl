@@ -109,7 +109,7 @@ linters-settings:
     extra-rules: true
 
   goimports:
-    local-prefixes: uradical.io/go/envctl
+    local-prefixes: envctl.dev/go/envctl
 
   misspell:
     locale: GB  # British English for uRadical (Ireland-based)
@@ -129,7 +129,7 @@ linters-settings:
       - .WithMessage(
       - .WithStack(
     ignorePackageGlobs:
-      - uradical.io/go/envctl/*
+      - envctl.dev/go/envctl/*
 
 issues:
   exclude-use-default: false

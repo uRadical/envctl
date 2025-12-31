@@ -5,8 +5,8 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-	"uradical.io/go/envctl/internal/chain"
-	"uradical.io/go/envctl/internal/config"
+	"envctl.dev/go/envctl/internal/chain"
+	"envctl.dev/go/envctl/internal/config"
 )
 
 // projectNameFlag is an alias for teamNameFlag used with --project flag

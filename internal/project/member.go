@@ -3,7 +3,7 @@ package project
 import (
 	"time"
 
-	"uradical.io/go/envctl/internal/chain"
+	"envctl.dev/go/envctl/internal/chain"
 )
 
 // Member wraps chain.Member with additional project-level methods

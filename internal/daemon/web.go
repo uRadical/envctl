@@ -15,8 +15,8 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"uradical.io/go/envctl/internal/audit"
-	"uradical.io/go/envctl/internal/chain"
+	"envctl.dev/go/envctl/internal/audit"
+	"envctl.dev/go/envctl/internal/chain"
 )
 
 // UIFilesystem is set from main package with embedded UI files

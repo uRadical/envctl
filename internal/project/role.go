@@ -3,7 +3,7 @@ package project
 import (
 	"fmt"
 
-	"uradical.io/go/envctl/internal/chain"
+	"envctl.dev/go/envctl/internal/chain"
 )
 
 // Re-export chain roles for convenience

@@ -6,10 +6,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"uradical.io/go/envctl/internal/config"
-	"uradical.io/go/envctl/internal/crypto"
-	"uradical.io/go/envctl/internal/link"
-	"uradical.io/go/envctl/internal/tui"
+	"envctl.dev/go/envctl/internal/config"
+	"envctl.dev/go/envctl/internal/crypto"
+	"envctl.dev/go/envctl/internal/link"
+	"envctl.dev/go/envctl/internal/tui"
 )
 
 var identityLinkCmd = &cobra.Command{

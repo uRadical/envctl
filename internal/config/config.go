@@ -12,6 +12,7 @@ type Config struct {
 	Identity      IdentityConfig      `toml:"identity"`
 	Daemon        DaemonConfig        `toml:"daemon"`
 	Discovery     DiscoveryConfig     `toml:"discovery"`
+	Relay         RelayConfig         `toml:"relay"`
 	Logging       LoggingConfig       `toml:"logging"`
 	Notifications NotificationsConfig `toml:"notifications"`
 	Defaults      DefaultsConfig      `toml:"defaults"`
@@ -33,6 +34,14 @@ type DaemonConfig struct {
 type DiscoveryConfig struct {
 	MDNS        bool     `toml:"mdns"`
 	ManualPeers []string `toml:"manual_peers"`
+}
+
+// RelayConfig contains relay server settings
+type RelayConfig struct {
+	// DefaultURL is the default relay server URL for new projects.
+	// Projects store their own relay URL in the chain, this is just the default
+	// suggested when enabling relay on a project.
+	DefaultURL string `toml:"default_url"`
 }
 
 // LoggingConfig contains logging settings
@@ -65,6 +74,9 @@ func Default() *Config {
 		Discovery: DiscoveryConfig{
 			MDNS:        true,
 			ManualPeers: []string{},
+		},
+		Relay: RelayConfig{
+			DefaultURL: "wss://relay.envctl.dev/ws",
 		},
 		Logging: LoggingConfig{
 			Level:  "info",

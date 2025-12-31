@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"uradical.io/go/envctl/internal/protocol"
+	"envctl.dev/go/envctl/internal/protocol"
 )
 
 // Request represents an IPC request from a client
@@ -287,6 +287,10 @@ var ipcHandlers = map[string]IPCHandler{
 	"chains.reload":               handleChainsReload,
 	"subscribe":                   handleSubscribe,
 	"identity.broadcast_rotation": handleBroadcastKeyRotation,
+	"relay.status":                handleRelayStatus,
+	"relay.project_status":        handleRelayProjectStatus,
+	"relay.connect":               handleRelayConnect,
+	"relay.disconnect":            handleRelayDisconnect,
 }
 
 // Handler implementations
@@ -423,4 +427,83 @@ func handleBroadcastKeyRotation(ctx context.Context, d *Daemon, client *IPCClien
 	}
 
 	return map[string]bool{"broadcast": true}, nil
+}
+
+func handleRelayStatus(ctx context.Context, d *Daemon, client *IPCClient, params json.RawMessage) (interface{}, error) {
+	rm := d.RelayManager()
+	if rm == nil {
+		return map[string]interface{}{
+			"enabled": false,
+		}, nil
+	}
+
+	status := rm.Status()
+	return map[string]interface{}{
+		"enabled":  true,
+		"projects": status.ProjectStatuses,
+	}, nil
+}
+
+func handleRelayProjectStatus(ctx context.Context, d *Daemon, client *IPCClient, params json.RawMessage) (interface{}, error) {
+	var project string
+	if err := json.Unmarshal(params, &project); err != nil {
+		return nil, fmt.Errorf("invalid params: %w", err)
+	}
+
+	rm := d.RelayManager()
+	if rm == nil {
+		return map[string]interface{}{
+			"enabled": false,
+		}, nil
+	}
+
+	// Get relay URL from chain
+	chain := d.GetChain(project)
+	if chain == nil {
+		return nil, fmt.Errorf("project not found: %s", project)
+	}
+
+	return map[string]interface{}{
+		"project":      project,
+		"relay_url":    chain.RelayURL(),
+		"allow_relay":  chain.AllowRelay(),
+		"status":       rm.ProjectStatus(project),
+	}, nil
+}
+
+func handleRelayConnect(ctx context.Context, d *Daemon, client *IPCClient, params json.RawMessage) (interface{}, error) {
+	var project string
+	if err := json.Unmarshal(params, &project); err != nil {
+		return nil, fmt.Errorf("invalid params: %w", err)
+	}
+
+	if err := d.ConnectProjectRelay(project); err != nil {
+		return nil, err
+	}
+
+	return map[string]interface{}{
+		"connected": true,
+		"project":   project,
+	}, nil
+}
+
+func handleRelayDisconnect(ctx context.Context, d *Daemon, client *IPCClient, params json.RawMessage) (interface{}, error) {
+	var project string
+	if err := json.Unmarshal(params, &project); err != nil {
+		return nil, fmt.Errorf("invalid params: %w", err)
+	}
+
+	rm := d.RelayManager()
+	if rm == nil {
+		return nil, fmt.Errorf("relay not enabled")
+	}
+
+	if err := rm.DisconnectProject(project); err != nil {
+		return nil, err
+	}
+
+	return map[string]interface{}{
+		"disconnected": true,
+		"project":      project,
+	}, nil
 }

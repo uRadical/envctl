@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"uradical.io/go/envctl/internal/chain"
-	"uradical.io/go/envctl/internal/crypto"
-	"uradical.io/go/envctl/internal/protocol"
+	"envctl.dev/go/envctl/internal/chain"
+	"envctl.dev/go/envctl/internal/crypto"
+	"envctl.dev/go/envctl/internal/protocol"
 )
 
 // Handlers contains all IPC method handlers

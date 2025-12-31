@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"golang.org/x/term"
-	"uradical.io/go/envctl/internal/env"
+	"envctl.dev/go/envctl/internal/env"
 )
 
 // RedactResult contains the result of the redaction screen

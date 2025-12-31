@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"uradical.io/go/envctl/internal/crypto"
+	"envctl.dev/go/envctl/internal/crypto"
 )
 
 // Builder creates new operations for a chain

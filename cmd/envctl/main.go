@@ -7,8 +7,8 @@ import (
 	"io/fs"
 	"os"
 
-	"uradical.io/go/envctl/internal/cli"
-	"uradical.io/go/envctl/internal/daemon"
+	"envctl.dev/go/envctl/internal/cli"
+	"envctl.dev/go/envctl/internal/daemon"
 )
 
 //go:embed ui

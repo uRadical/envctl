@@ -12,10 +12,12 @@ import (
 	"syscall"
 	"time"
 
-	"uradical.io/go/envctl/internal/chain"
-	"uradical.io/go/envctl/internal/config"
-	"uradical.io/go/envctl/internal/crypto"
-	"uradical.io/go/envctl/internal/opschain"
+	"envctl.dev/go/envctl/internal/chain"
+	"envctl.dev/go/envctl/internal/config"
+	"envctl.dev/go/envctl/internal/crypto"
+	"envctl.dev/go/envctl/internal/opschain"
+	"envctl.dev/go/envctl/internal/protocol"
+	"envctl.dev/go/envctl/internal/relay"
 )
 
 // Daemon is the main envctl daemon
@@ -41,6 +43,8 @@ type Daemon struct {
 	agentConfig      AgentConfig
 	leaseManager     *LeaseManager
 	opsChainManager  *opschain.Manager
+	relayManager     *relay.Manager
+	relayConfig      *config.RelayConfig
 }
 
 // Status represents the daemon's current status
@@ -68,6 +72,7 @@ type Options struct {
 	AgentConfig       AgentConfig
 	NotifyEnabled     bool
 	LockOnSleep       bool
+	RelayConfig       *config.RelayConfig
 }
 
 // New creates a new daemon instance
@@ -116,6 +121,13 @@ func New(opts *Options) (*Daemon, error) {
 		opts.Identity,
 	)
 
+	// Create relay manager if config provided
+	if opts.RelayConfig != nil {
+		d.relayConfig = opts.RelayConfig
+		d.relayManager = relay.NewManager(opts.Identity, opts.RelayConfig)
+		// Message handler will be set after peer manager is created
+	}
+
 	// Set up agent callbacks
 	d.agent.SetCallbacks(d.onAgentLock, d.onAgentUnlock)
 
@@ -141,6 +153,11 @@ func New(opts *Options) (*Daemon, error) {
 		p2pPort = 7834
 	}
 	d.peerManager = NewPeerManager(d, p2pPort)
+
+	// Set up relay message handler now that peer manager exists
+	if d.relayManager != nil {
+		d.relayManager.SetMessageHandler(d.handleRelayMessage)
+	}
 
 	// Create web server if enabled
 	if opts.WebEnabled {
@@ -256,6 +273,11 @@ func (d *Daemon) Start() error {
 	// Start lease manager
 	d.leaseManager.Start()
 
+	// Connect to relays for projects that have relay configured
+	if d.relayManager != nil {
+		d.connectProjectRelays()
+	}
+
 	slog.Info("Daemon started")
 
 	return nil
@@ -285,6 +307,13 @@ func (d *Daemon) Stop() error {
 	slog.Info("Stopping daemon")
 
 	d.cancel()
+
+	// Stop relay manager
+	if d.relayManager != nil {
+		if err := d.relayManager.Stop(); err != nil {
+			slog.Warn("Failed to stop relay manager", "error", err)
+		}
+	}
 
 	// Stop lease manager
 	if d.leaseManager != nil {
@@ -505,6 +534,53 @@ func (d *Daemon) GetOpsChainManager() *opschain.Manager {
 	return d.opsChainManager
 }
 
+// RelayManager returns the relay manager
+func (d *Daemon) RelayManager() *relay.Manager {
+	return d.relayManager
+}
+
+// connectProjectRelays connects to relays for all projects that have relay configured
+func (d *Daemon) connectProjectRelays() {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+
+	for name, c := range d.chains {
+		relayURL := c.RelayURL()
+		if relayURL == "" || !c.AllowRelay() {
+			continue
+		}
+
+		go func(project, url string) {
+			if err := d.relayManager.ConnectProject(project, url); err != nil {
+				slog.Warn("Failed to connect to relay", "project", project, "url", url, "error", err)
+			}
+		}(name, relayURL)
+	}
+}
+
+// ConnectProjectRelay connects to the relay for a specific project
+func (d *Daemon) ConnectProjectRelay(project string) error {
+	if d.relayManager == nil {
+		return fmt.Errorf("relay not enabled")
+	}
+
+	c := d.GetChain(project)
+	if c == nil {
+		return fmt.Errorf("project not found: %s", project)
+	}
+
+	relayURL := c.RelayURL()
+	if relayURL == "" {
+		return fmt.Errorf("no relay configured for project %s", project)
+	}
+
+	if !c.AllowRelay() {
+		return fmt.Errorf("relay not enabled for project %s", project)
+	}
+
+	return d.relayManager.ConnectProject(project, relayURL)
+}
+
 // MetricsSnapshot returns a point-in-time snapshot of all metrics
 func (d *Daemon) MetricsSnapshot() *MetricsSnapshot {
 	return d.metrics.Snapshot(func() GaugeMetrics {
@@ -717,4 +793,26 @@ func (d *Daemon) loadIdentityWithPassphrase(passphrase []byte) (*crypto.Identity
 	}
 
 	return nil, fmt.Errorf("no identity found")
+}
+
+// handleRelayMessage processes a message received via the relay.
+// Messages received via relay are processed the same as P2P messages.
+func (d *Daemon) handleRelayMessage(project string, msg *protocol.Message) error {
+	slog.Debug("received relay message",
+		"project", project,
+		"type", msg.Type,
+	)
+
+	// Verify message signature if signed
+	if msg.IsSigned() {
+		if err := msg.Verify(); err != nil {
+			return fmt.Errorf("invalid message signature: %w", err)
+		}
+	}
+
+	// Route to peer manager for processing
+	// The peer manager handles all protocol message types
+	d.peerManager.HandleRelayMessage(project, msg)
+
+	return nil
 }

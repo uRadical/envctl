@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"uradical.io/go/envctl/internal/crypto"
+	"envctl.dev/go/envctl/internal/crypto"
 )
 
 // Chain represents a team membership blockchain
@@ -732,6 +732,26 @@ func (c *Chain) ValidateInvite(code string, pubkey []byte) (*Invite, error) {
 	}
 
 	return invite, nil
+}
+
+// RelayURL returns the relay URL configured for this team, or empty string if not set
+func (c *Chain) RelayURL() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if c.policy == nil {
+		return ""
+	}
+	return c.policy.Relay
+}
+
+// AllowRelay returns whether relay is enabled for this team
+func (c *Chain) AllowRelay() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if c.policy == nil {
+		return false
+	}
+	return c.policy.AllowRelay
 }
 
 // GetAllInvites returns all invites with their status

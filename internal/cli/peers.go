@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	"uradical.io/go/envctl/internal/client"
+	"envctl.dev/go/envctl/internal/client"
 )
 
 func init() {

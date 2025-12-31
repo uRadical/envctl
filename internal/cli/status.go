@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"uradical.io/go/envctl/internal/config"
-	"uradical.io/go/envctl/internal/secrets"
+	"envctl.dev/go/envctl/internal/config"
+	"envctl.dev/go/envctl/internal/secrets"
 )
 
 func init() {

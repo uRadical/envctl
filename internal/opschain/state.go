@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"uradical.io/go/envctl/internal/crypto"
+	"envctl.dev/go/envctl/internal/crypto"
 )
 
 // State represents the computed state of environment variables.

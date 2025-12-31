@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"uradical.io/go/envctl/internal/crypto"
+	"envctl.dev/go/envctl/internal/crypto"
 )
 
 // Manager coordinates operations chain management for a project/environment

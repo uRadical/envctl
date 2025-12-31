@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"uradical.io/go/envctl/internal/crypto"
+	"envctl.dev/go/envctl/internal/crypto"
 )
 
 // HandshakeTimeout is the maximum time allowed for a handshake

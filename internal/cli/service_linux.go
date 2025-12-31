@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"text/template"
 
-	"uradical.io/go/envctl/internal/config"
+	"envctl.dev/go/envctl/internal/config"
 )
 
 const systemdUnitTemplate = `[Unit]

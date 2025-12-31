@@ -15,7 +15,7 @@ Zero-infrastructure secrets sharing for dev teams — encrypted, peer-to-peer, n
 
 ```bash
 # Install
-go install uradical.io/go/envctl@latest
+go install envctl.dev/go/envctl@latest
 
 # Initialize your identity
 envctl identity init

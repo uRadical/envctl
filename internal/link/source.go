@@ -11,7 +11,7 @@ import (
 	"net"
 	"time"
 
-	"uradical.io/go/envctl/internal/crypto"
+	"envctl.dev/go/envctl/internal/crypto"
 )
 
 // IdentityPayload is the encrypted data sent to target

@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"fmt"
 
-	"uradical.io/go/envctl/internal/chain"
+	"envctl.dev/go/envctl/internal/chain"
 )
 
 // AuthError represents an authorization error

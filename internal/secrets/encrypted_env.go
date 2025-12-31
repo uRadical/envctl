@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	"uradical.io/go/envctl/internal/crypto"
+	"envctl.dev/go/envctl/internal/crypto"
 )
 
 // EncryptedEnv represents the structure of an encrypted environment file

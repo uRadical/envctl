@@ -11,11 +11,11 @@ import (
 	"github.com/skip2/go-qrcode"
 	"github.com/spf13/cobra"
 
-	"uradical.io/go/envctl/internal/client"
-	"uradical.io/go/envctl/internal/config"
-	"uradical.io/go/envctl/internal/crypto"
-	"uradical.io/go/envctl/internal/keychain"
-	"uradical.io/go/envctl/internal/tui"
+	"envctl.dev/go/envctl/internal/client"
+	"envctl.dev/go/envctl/internal/config"
+	"envctl.dev/go/envctl/internal/crypto"
+	"envctl.dev/go/envctl/internal/keychain"
+	"envctl.dev/go/envctl/internal/tui"
 )
 
 var identityCmd = &cobra.Command{

@@ -1,4 +1,4 @@
-.PHONY: build test lint lint-fix lint-verbose security check install clean vendor man all help
+.PHONY: build test lint lint-fix lint-verbose security check install clean vendor man all help release release-snapshot release-dry-run
 
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 LDFLAGS := -ldflags="-s -w -X main.version=$(VERSION)"
@@ -131,20 +131,47 @@ dev:
 version:
 	@echo $(VERSION)
 
+# Release with goreleaser (requires GITHUB_TOKEN)
+release:
+	@if command -v goreleaser >/dev/null 2>&1; then \
+		goreleaser release --clean; \
+	else \
+		echo "goreleaser not installed. Run: go install github.com/goreleaser/goreleaser/v2@latest"; \
+	fi
+
+# Test release locally (creates binaries in dist/)
+release-snapshot:
+	@if command -v goreleaser >/dev/null 2>&1; then \
+		goreleaser release --snapshot --clean; \
+	else \
+		echo "goreleaser not installed. Run: go install github.com/goreleaser/goreleaser/v2@latest"; \
+	fi
+
+# Dry-run release (validates config and shows what would happen)
+release-dry-run:
+	@if command -v goreleaser >/dev/null 2>&1; then \
+		goreleaser release --skip=publish --clean; \
+	else \
+		echo "goreleaser not installed. Run: go install github.com/goreleaser/goreleaser/v2@latest"; \
+	fi
+
 # Show help
 help:
 	@echo "envctl Makefile"
 	@echo ""
 	@echo "Usage:"
-	@echo "  make build      - Build the binary"
-	@echo "  make test       - Run tests"
-	@echo "  make lint       - Run linter"
-	@echo "  make lint-fix   - Run linter with auto-fix"
-	@echo "  make security   - Run security checks"
-	@echo "  make check      - Run all checks (lint, security, test)"
-	@echo "  make install    - Install to /usr/local/bin"
-	@echo "  make clean      - Clean build artifacts"
-	@echo "  make build-all  - Build for all platforms"
-	@echo "  make vendor     - Vendor dependencies"
-	@echo "  make fmt        - Format code"
-	@echo "  make help       - Show this help"
+	@echo "  make build            - Build the binary"
+	@echo "  make test             - Run tests"
+	@echo "  make lint             - Run linter"
+	@echo "  make lint-fix         - Run linter with auto-fix"
+	@echo "  make security         - Run security checks"
+	@echo "  make check            - Run all checks (lint, security, test)"
+	@echo "  make install          - Install to /usr/local/bin"
+	@echo "  make clean            - Clean build artifacts"
+	@echo "  make build-all        - Build for all platforms"
+	@echo "  make vendor           - Vendor dependencies"
+	@echo "  make fmt              - Format code"
+	@echo "  make release          - Create release with goreleaser"
+	@echo "  make release-snapshot - Test release locally"
+	@echo "  make release-dry-run  - Dry-run release (no publish)"
+	@echo "  make help             - Show this help"

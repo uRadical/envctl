@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"uradical.io/go/envctl/internal/config"
+	"envctl.dev/go/envctl/internal/config"
 )
 
 // Logger handles audit logging with both file persistence and in-memory ring buffer

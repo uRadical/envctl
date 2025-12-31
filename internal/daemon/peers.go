@@ -15,10 +15,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"uradical.io/go/envctl/internal/chain"
-	"uradical.io/go/envctl/internal/crypto"
-	"uradical.io/go/envctl/internal/opschain"
-	"uradical.io/go/envctl/internal/protocol"
+	"envctl.dev/go/envctl/internal/chain"
+	"envctl.dev/go/envctl/internal/crypto"
+	"envctl.dev/go/envctl/internal/opschain"
+	"envctl.dev/go/envctl/internal/protocol"
 )
 
 const (
@@ -2222,11 +2222,12 @@ func (pm *PeerManager) LastSeen(pubkeyHex string) time.Time {
 	return time.Time{}
 }
 
-// BroadcastToTeam broadcasts a message to all connected peers in a team
+// BroadcastToTeam broadcasts a message to all connected peers in a team.
+// For offline peers, if relay is configured for the project, the message
+// is sent via the relay for later delivery.
 func (pm *PeerManager) BroadcastToTeam(team string, msg *protocol.Message) {
 	pm.mu.RLock()
-	defer pm.mu.RUnlock()
-
+	connectedFingerprints := make(map[string]bool)
 	for _, peer := range pm.peers {
 		if peer.State != PeerStateConnected {
 			continue
@@ -2234,6 +2235,7 @@ func (pm *PeerManager) BroadcastToTeam(team string, msg *protocol.Message) {
 
 		for _, t := range peer.sharedTeams {
 			if t == team {
+				connectedFingerprints[peer.Fingerprint] = true
 				select {
 				case peer.sendCh <- msg:
 				default:
@@ -2241,6 +2243,298 @@ func (pm *PeerManager) BroadcastToTeam(team string, msg *protocol.Message) {
 				break
 			}
 		}
+	}
+	pm.mu.RUnlock()
+
+	// Send via relay to offline team members
+	pm.sendToOfflineMembers(team, msg, connectedFingerprints)
+}
+
+// sendToOfflineMembers sends a message via relay to offline team members
+func (pm *PeerManager) sendToOfflineMembers(team string, msg *protocol.Message, connectedFingerprints map[string]bool) {
+	// Check if relay is configured for this project
+	rm := pm.daemon.RelayManager()
+	if rm == nil || !rm.IsProjectConnected(team) {
+		return
+	}
+
+	// Get the chain to find all members
+	c := pm.daemon.GetChain(team)
+	if c == nil {
+		return
+	}
+
+	// Check if relay is enabled for this project
+	if !c.AllowRelay() || c.RelayURL() == "" {
+		return
+	}
+
+	myFingerprint := pm.daemon.identity.Fingerprint()
+	members := c.Members()
+
+	for _, member := range members {
+		fingerprint := crypto.PublicKeyFingerprint(member.SigningPub)
+
+		// Skip ourselves
+		if fingerprint == myFingerprint {
+			continue
+		}
+
+		// Skip if already sent via P2P
+		if connectedFingerprints[fingerprint] {
+			continue
+		}
+
+		// Send via relay
+		pubIdentity := &crypto.PublicIdentity{
+			Name:       member.Name,
+			MLKEMPub:   member.MLKEMPub,
+			SigningPub: member.SigningPub,
+		}
+
+		go func(fp string, pub *crypto.PublicIdentity) {
+			if err := rm.SendToOfflinePeer(team, fp, pub, msg); err != nil {
+				slog.Debug("failed to send via relay",
+					"team", team,
+					"to", fp[:8],
+					"error", err,
+				)
+			}
+		}(fingerprint, pubIdentity)
+	}
+}
+
+// HandleRelayMessage processes a message received via the relay.
+// These messages are handled similarly to P2P messages but without a peer connection.
+func (pm *PeerManager) HandleRelayMessage(project string, msg *protocol.Message) {
+	slog.Debug("Processing relay message",
+		"project", project,
+		"type", msg.Type,
+	)
+
+	// For relay messages, we don't have a peer connection
+	// Handle only message types that make sense without a connection
+	switch msg.Type {
+	case protocol.MsgChainHead:
+		// Can't request blocks via relay (need bidirectional connection)
+		// Just log for now
+		slog.Debug("Received chain_head via relay, cannot request blocks without peer connection")
+
+	case protocol.MsgBlocks:
+		// Process blocks received via relay
+		pm.handleBlocksFromRelay(project, msg)
+
+	case protocol.MsgProposal:
+		pm.handleProposalFromRelay(project, msg)
+
+	case protocol.MsgApproval:
+		pm.handleApprovalFromRelay(project, msg)
+
+	case protocol.MsgOpsPush:
+		pm.handleOpsPushFromRelay(project, msg)
+
+	default:
+		slog.Debug("Ignoring relay message type", "type", msg.Type)
+	}
+}
+
+// handleBlocksFromRelay processes blocks received via relay
+func (pm *PeerManager) handleBlocksFromRelay(project string, msg *protocol.Message) {
+	var resp protocol.Blocks
+	if err := msg.ParsePayload(&resp); err != nil {
+		slog.Warn("Invalid blocks payload from relay", "error", err)
+		return
+	}
+
+	c := pm.daemon.GetChain(resp.Team)
+	if c == nil {
+		slog.Debug("Received blocks for unknown team from relay", "team", resp.Team)
+		return
+	}
+
+	var blocks []*chain.Block
+	if err := json.Unmarshal(resp.Blocks, &blocks); err != nil {
+		slog.Warn("Failed to unmarshal blocks from relay", "error", err)
+		return
+	}
+
+	for _, block := range blocks {
+		if err := c.AppendBlock(block); err != nil {
+			slog.Debug("Failed to append block from relay", "error", err)
+			continue
+		}
+		slog.Info("Appended block from relay",
+			"team", resp.Team,
+			"action", block.Action,
+			"index", block.Index,
+		)
+	}
+
+	// Save chain
+	if err := c.Save(pm.daemon.paths.ChainFile(resp.Team)); err != nil {
+		slog.Error("Failed to save chain", "team", resp.Team, "error", err)
+	}
+}
+
+// handleProposalFromRelay processes a proposal received via relay
+func (pm *PeerManager) handleProposalFromRelay(project string, msg *protocol.Message) {
+	var proposal protocol.Proposal
+	if err := msg.ParsePayload(&proposal); err != nil {
+		slog.Warn("Invalid proposal payload from relay", "error", err)
+		return
+	}
+
+	// Parse the block
+	var block chain.Block
+	if err := json.Unmarshal(proposal.Block, &block); err != nil {
+		slog.Warn("Failed to parse proposal block from relay", "error", err)
+		return
+	}
+
+	c := pm.daemon.GetChain(proposal.Team)
+	if c == nil {
+		slog.Debug("Proposal for unknown team from relay", "team", proposal.Team)
+		return
+	}
+
+	// Store as pending proposal (same logic as P2P)
+	hashHex := hex.EncodeToString(block.Hash)
+
+	// Create pending proposal and add to store
+	pending := &PendingProposal{
+		Block:      &block,
+		Team:       proposal.Team,
+		ReceivedAt: time.Now(),
+		Approvals:  make(map[string]protocol.Approval),
+	}
+	pm.proposalStore.Add(hashHex, pending)
+
+	slog.Info("Received proposal via relay",
+		"team", proposal.Team,
+		"action", block.Action,
+		"hash", hashHex[:8],
+	)
+}
+
+// handleApprovalFromRelay processes an approval received via relay
+func (pm *PeerManager) handleApprovalFromRelay(project string, msg *protocol.Message) {
+	var approval protocol.Approval
+	if err := msg.ParsePayload(&approval); err != nil {
+		slog.Warn("Invalid approval payload from relay", "error", err)
+		return
+	}
+
+	hashHex := hex.EncodeToString(approval.BlockHash)
+	enhanced, ok := pm.proposalStore.Get(hashHex)
+	if !ok {
+		slog.Debug("Approval for unknown proposal from relay", "hash", hashHex[:8])
+		return
+	}
+	pending := enhanced.PendingProposal
+
+	// Add approval (same logic as P2P)
+	pending.mu.Lock()
+	pending.Approvals[hex.EncodeToString(approval.By)] = approval
+	approvalCount := len(pending.Approvals)
+	pending.mu.Unlock()
+
+	slog.Info("Received approval via relay",
+		"team", approval.Team,
+		"hash", hashHex[:8],
+		"approvals", approvalCount,
+	)
+
+	c := pm.daemon.GetChain(approval.Team)
+	if c == nil {
+		return
+	}
+
+	// Check if we now have sufficient approvals
+	if c.HasSufficientApprovals(pending.Block) {
+		if err := c.AppendBlock(pending.Block); err != nil {
+			slog.Error("Failed to commit block with approvals from relay",
+				"hash", hashHex[:8],
+				"error", err,
+			)
+			return
+		}
+
+		slog.Info("Block committed with consensus (via relay)",
+			"team", pending.Team,
+			"action", pending.Block.Action,
+			"index", pending.Block.Index,
+		)
+
+		// Save chain
+		if err := c.Save(pm.daemon.paths.ChainFile(approval.Team)); err != nil {
+			slog.Error("Failed to save chain", "team", approval.Team, "error", err)
+		}
+	}
+}
+
+// handleOpsPushFromRelay processes an ops push received via relay
+func (pm *PeerManager) handleOpsPushFromRelay(project string, msg *protocol.Message) {
+	var push protocol.OpsPush
+	if err := msg.ParsePayload(&push); err != nil {
+		slog.Warn("Invalid ops_push payload from relay", "error", err)
+		return
+	}
+
+	slog.Info("Received ops_push via relay",
+		"project", push.Project,
+		"env", push.Environment,
+		"count", len(push.Operations),
+	)
+
+	// Get ops chain manager
+	ocm := pm.daemon.GetOpsChainManager()
+	if ocm == nil {
+		slog.Warn("Ops chain manager not initialized")
+		return
+	}
+
+	// Load the ops chain
+	oc, err := ocm.LoadChain(push.Project, push.Environment)
+	if err != nil {
+		slog.Warn("Failed to load ops chain for relay ops",
+			"project", push.Project,
+			"env", push.Environment,
+			"error", err,
+		)
+		return
+	}
+
+	// Process each operation
+	for _, op := range push.Operations {
+		// Convert protocol operation to opschain operation
+		opsOp := &opschain.Operation{
+			Seq:            op.Seq,
+			Timestamp:      time.Unix(0, op.Timestamp),
+			Author:         op.Author,
+			Op:             opschain.OpType(op.Op),
+			Key:            op.Key,
+			EncryptedValue: op.EncryptedValue,
+			PrevHash:       op.PrevHash,
+			Signature:      op.Signature,
+		}
+
+		// Append without verification (since relay messages are from authenticated peers)
+		if err := oc.AppendWithoutVerification(opsOp); err != nil {
+			slog.Debug("Failed to append operation from relay",
+				"error", err,
+				"seq", op.Seq,
+			)
+			continue
+		}
+	}
+
+	// Save the updated chain
+	if err := ocm.SaveChain(oc); err != nil {
+		slog.Error("Failed to save ops chain after relay sync",
+			"project", push.Project,
+			"env", push.Environment,
+			"error", err,
+		)
 	}
 }
 
