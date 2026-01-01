@@ -2,6 +2,8 @@
 
 Zero-infrastructure secrets sharing for dev teams — encrypted, peer-to-peer, no cloud.
 
+**[envctl.dev](https://envctl.dev)** · [Documentation](#usage) · [Install](#installation)
+
 ## Features
 
 - **Post-quantum encryption** — ML-KEM-768 for future-proof security
