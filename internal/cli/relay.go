@@ -260,6 +260,7 @@ The relay enables async sync with offline peers. When a peer is offline,
 messages are stored on the relay and delivered when they come online.
 
 All messages are end-to-end encrypted - the relay only sees encrypted blobs.`,
+	PersistentPreRun: projectPreRun, // Copy --project to teamNameFlag
 }
 
 var projectRelayStatusCmd = &cobra.Command{
@@ -378,22 +379,50 @@ func runProjectRelaySet(cmd *cobra.Command, args []string) error {
 		project = inferred.Name
 	}
 
-	// For now, just show what would be done
-	// The actual implementation would create a proposal to update the policy
-	if disable {
-		fmt.Printf("Would create proposal to disable relay for project %s\n", project)
-		fmt.Println()
-		fmt.Println("Note: Relay configuration changes require admin consensus.")
-	} else {
-		fmt.Printf("Would create proposal to set relay URL for project %s:\n", project)
-		fmt.Printf("  URL: %s\n", url)
-		fmt.Println()
-		fmt.Println("Note: Relay configuration changes require admin consensus.")
+	if err := client.RequireDaemon(); err != nil {
+		return fmt.Errorf("daemon not running. Start with: envctl daemon start")
 	}
 
-	fmt.Println()
-	fmt.Println("This feature is not yet fully implemented.")
-	fmt.Println("Relay URL must be set directly in the chain policy for now.")
+	c, err := client.Connect()
+	if err != nil {
+		return fmt.Errorf("connect to daemon: %w", err)
+	}
+	defer c.Close()
+
+	req := map[string]interface{}{
+		"project": project,
+		"url":     url,
+		"disable": disable,
+	}
+
+	result, err := c.Call("relay.set", req)
+	if err != nil {
+		return fmt.Errorf("set relay: %w", err)
+	}
+
+	var resp struct {
+		Success bool   `json:"success"`
+		Pending bool   `json:"pending"`
+		Project string `json:"project"`
+		Action  string `json:"action"`
+		URL     string `json:"url"`
+		Message string `json:"message"`
+	}
+
+	if err := json.Unmarshal(result, &resp); err != nil {
+		return fmt.Errorf("parse response: %w", err)
+	}
+
+	if resp.Success {
+		if resp.Action == "disabled" {
+			fmt.Printf("Relay disabled for project %s\n", resp.Project)
+		} else {
+			fmt.Printf("Relay enabled for project %s\n", resp.Project)
+			fmt.Printf("  URL: %s\n", resp.URL)
+		}
+	} else if resp.Pending {
+		fmt.Println(resp.Message)
+	}
 
 	return nil
 }

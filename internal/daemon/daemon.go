@@ -121,12 +121,14 @@ func New(opts *Options) (*Daemon, error) {
 		opts.Identity,
 	)
 
-	// Create relay manager if config provided
-	if opts.RelayConfig != nil {
-		d.relayConfig = opts.RelayConfig
-		d.relayManager = relay.NewManager(opts.Identity, opts.RelayConfig)
-		// Message handler will be set after peer manager is created
+	// Create relay manager (always, so projects can enable relay)
+	relayConfig := opts.RelayConfig
+	if relayConfig == nil {
+		relayConfig = &config.RelayConfig{} // Empty config is fine
 	}
+	d.relayConfig = relayConfig
+	d.relayManager = relay.NewManager(opts.Identity, relayConfig)
+	// Message handler will be set after peer manager is created
 
 	// Set up agent callbacks
 	d.agent.SetCallbacks(d.onAgentLock, d.onAgentUnlock)
@@ -491,7 +493,9 @@ func (d *Daemon) PeerManager() *PeerManager {
 
 // BroadcastEvent broadcasts an event to all IPC clients
 func (d *Daemon) BroadcastEvent(event *Event) {
-	d.ipcServer.BroadcastEvent(event)
+	if d.ipcServer != nil {
+		d.ipcServer.BroadcastEvent(event)
+	}
 }
 
 // LogBuffer returns the daemon's log buffer

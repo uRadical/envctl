@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"os/exec"
@@ -11,12 +12,17 @@ import (
 // InferredName contains the inferred project name and its source
 type InferredName struct {
 	Name   string
-	Source string // "git remote origin" or "directory name"
+	Source string // ".envctl/config", "git remote origin", or "directory name"
 }
 
-// inferProjectName attempts to infer project name from git remote or directory
+// inferProjectName attempts to infer project name from .envctl/config, git remote, or directory
 func inferProjectName() (*InferredName, error) {
-	// Try git remote origin first
+	// First, check .envctl/config in current directory
+	if name := readProjectFromConfig(".envctl/config"); name != "" {
+		return &InferredName{Name: name, Source: ".envctl/config"}, nil
+	}
+
+	// Try git remote origin
 	cmd := exec.Command("git", "remote", "get-url", "origin")
 	output, err := cmd.Output()
 	if err == nil {
@@ -38,6 +44,24 @@ func inferProjectName() (*InferredName, error) {
 	}
 
 	return &InferredName{Name: name, Source: "directory name"}, nil
+}
+
+// readProjectFromConfig reads the project name from .envctl/config file
+func readProjectFromConfig(configPath string) string {
+	file, err := os.Open(configPath)
+	if err != nil {
+		return ""
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if strings.HasPrefix(line, "project=") {
+			return strings.TrimPrefix(line, "project=")
+		}
+	}
+	return ""
 }
 
 // parseRepoNameFromURL extracts repo name from git URL

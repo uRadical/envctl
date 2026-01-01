@@ -10,10 +10,10 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"envctl.dev/go/envctl/internal/chain"
 	"envctl.dev/go/envctl/internal/client"
 	"envctl.dev/go/envctl/internal/config"
 	"envctl.dev/go/envctl/internal/crypto"
-	"envctl.dev/go/envctl/internal/env"
 	"envctl.dev/go/envctl/internal/opschain"
 	"envctl.dev/go/envctl/internal/tui"
 )
@@ -26,10 +26,13 @@ func init() {
 	envCmd.AddCommand(envCurrentCmd)
 	envCmd.AddCommand(envEditCmd)
 	envCmd.AddCommand(envClearCmd)
+	envCmd.AddCommand(envCreateCmd)
+	envCmd.AddCommand(envDeleteCmd)
 	// envVarCmd is added in var.go's init()
 
 	envCurrentCmd.Flags().Bool("prompt", false, "output for shell prompt")
 	envEditCmd.Flags().StringP("env", "e", "", "target environment (default: current environment)")
+	envDeleteCmd.Flags().Bool("force", false, "force remove and revoke access from members")
 }
 
 var envCmd = &cobra.Command{
@@ -43,67 +46,60 @@ and switching between them via symlinks.`,
 
 var envListCmd = &cobra.Command{
 	Use:   "list",
-	Short: "List .env variants in current directory",
-	RunE:  runEnvList,
+	Short: "List environments in the project",
+	Long: `List all environments available in the current project.
+
+Shows environments defined in the project chain (e.g., dev, staging, prod)
+along with how many team members have access to each.
+
+The current environment (from .envctl/config) is marked with *.`,
+	RunE: runEnvList,
 }
 
 func runEnvList(cmd *cobra.Command, args []string) error {
-	cwd, err := os.Getwd()
+	teamName, err := resolveTeamName(nil)
 	if err != nil {
-		return fmt.Errorf("get working directory: %w", err)
+		return err
 	}
 
-	entries, err := os.ReadDir(cwd)
+	paths, err := config.GetPaths()
 	if err != nil {
-		return fmt.Errorf("read directory: %w", err)
+		return fmt.Errorf("get paths: %w", err)
 	}
 
-	// Find .env files
-	envFiles := make([]string, 0)
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-
-		name := entry.Name()
-		if name == ".env" || strings.HasPrefix(name, ".env.") {
-			envFiles = append(envFiles, name)
-		}
+	chainPath := paths.ChainFile(teamName)
+	teamChain, err := chain.Load(chainPath)
+	if err != nil {
+		return fmt.Errorf("load project: %w", err)
 	}
 
-	if len(envFiles) == 0 {
-		fmt.Println("No .env files found in current directory.")
-		return nil
-	}
+	policy := teamChain.Policy()
 
-	// Check which one is current (if .env is a symlink)
+	// Get current environment from .envctl/config
+	cwd, _ := os.Getwd()
 	currentEnv := ""
-	if info, err := os.Lstat(filepath.Join(cwd, ".env")); err == nil {
-		if info.Mode()&os.ModeSymlink != 0 {
-			target, err := os.Readlink(filepath.Join(cwd, ".env"))
-			if err == nil {
-				currentEnv = target
-			}
-		} else {
-			currentEnv = ".env"
-		}
+	if projectConfig, err := config.LoadProjectConfig(cwd); err == nil {
+		currentEnv = projectConfig.Env
 	}
 
-	fmt.Println("Environment files:")
-	for _, f := range envFiles {
+	fmt.Printf("Environments for '%s':\n\n", teamName)
+
+	for _, envName := range policy.Environments {
+		members := teamChain.MembersWithEnvAccess(envName)
+
 		marker := "  "
-		if f == currentEnv || f == ".env" && currentEnv == ".env" {
+		if envName == currentEnv {
 			marker = "* "
 		}
 
-		// Count variables
-		envFile, err := env.Parse(filepath.Join(cwd, f))
-		varCount := "?"
-		if err == nil {
-			varCount = fmt.Sprintf("%d", len(envFile.Variables))
+		defaultMarker := ""
+		for _, d := range policy.DefaultAccess {
+			if d == envName {
+				defaultMarker = " [default]"
+				break
+			}
 		}
-
-		fmt.Printf("%s%s (%s vars)\n", marker, f, varCount)
+		fmt.Printf("%s%-12s (%d members)%s\n", marker, envName, len(members), defaultMarker)
 	}
 
 	return nil
@@ -640,6 +636,201 @@ func ensureGitignore(projectDir string) error {
 	f.WriteString("\n# envctl - secrets management\n")
 	for _, entry := range toAdd {
 		f.WriteString(entry + "\n")
+	}
+
+	return nil
+}
+
+var envCreateCmd = &cobra.Command{
+	Use:   "create <environment>",
+	Short: "Create a new environment in the project",
+	Long: `Create a new environment for storing secrets.
+
+Environments are isolated sets of variables (e.g., dev, staging, prod).
+Team members can be granted access to specific environments.
+
+Examples:
+  envctl env create staging
+  envctl env create production`,
+	Args: cobra.ExactArgs(1),
+	RunE: runEnvCreate,
+}
+
+func runEnvCreate(cmd *cobra.Command, args []string) error {
+	envName := strings.TrimSpace(args[0])
+
+	if !isValidEnvName(envName) {
+		return fmt.Errorf("invalid environment name: must be lowercase alphanumeric with hyphens, 1-32 chars")
+	}
+
+	teamName, err := resolveTeamName(nil)
+	if err != nil {
+		return err
+	}
+
+	paths, err := config.GetPaths()
+	if err != nil {
+		return fmt.Errorf("get paths: %w", err)
+	}
+
+	chainPath := paths.ChainFile(teamName)
+	teamChain, err := chain.Load(chainPath)
+	if err != nil {
+		return fmt.Errorf("load project: %w", err)
+	}
+
+	policy := teamChain.Policy()
+
+	// Check if environment already exists
+	if policy.IsValidEnvironment(envName) {
+		return fmt.Errorf("environment '%s' already exists", envName)
+	}
+
+	// Load identity
+	passphrase, err := tui.ReadPassword("Passphrase: ")
+	if err != nil {
+		return fmt.Errorf("read passphrase: %w", err)
+	}
+
+	identity, err := crypto.LoadEncrypted(paths.IdentityFile, passphrase)
+	crypto.ZeroBytes(passphrase)
+	if err != nil {
+		return fmt.Errorf("load identity: %w", err)
+	}
+
+	// Check permission
+	if err := teamChain.CanPropose(chain.ActionAddEnv, identity.SigningPublicKey()); err != nil {
+		return fmt.Errorf("cannot create environment: %w", err)
+	}
+
+	// Create add env subject
+	subject := chain.EnvChange{
+		Environment: envName,
+	}
+
+	head := teamChain.Head()
+	block, err := chain.NewBlock(head, chain.ActionAddEnv, subject, identity)
+	if err != nil {
+		return fmt.Errorf("create block: %w", err)
+	}
+
+	status := teamChain.GetApprovalStatus(block)
+	if status.Required > 0 {
+		fmt.Printf("Proposal created. Requires %d approval(s).\n", status.Required)
+	} else {
+		if err := teamChain.AppendBlock(block); err != nil {
+			return fmt.Errorf("append block: %w", err)
+		}
+		if err := teamChain.Save(chainPath); err != nil {
+			return fmt.Errorf("save chain: %w", err)
+		}
+		client.NotifyChainChange()
+		fmt.Printf("Created environment '%s'\n", envName)
+	}
+
+	return nil
+}
+
+var envDeleteCmd = &cobra.Command{
+	Use:   "delete <environment>",
+	Short: "Delete an environment from the project",
+	Long: `Delete an environment and all its variables.
+
+This removes the environment definition from the project. Any secrets
+stored in this environment will no longer be accessible.
+
+Use --force to also revoke access from members who have access to this environment.
+
+Examples:
+  envctl env delete staging
+  envctl env delete old-env --force`,
+	Args: cobra.ExactArgs(1),
+	RunE: runEnvDelete,
+}
+
+func runEnvDelete(cmd *cobra.Command, args []string) error {
+	envName := strings.TrimSpace(args[0])
+	force, _ := cmd.Flags().GetBool("force")
+
+	teamName, err := resolveTeamName(nil)
+	if err != nil {
+		return err
+	}
+
+	paths, err := config.GetPaths()
+	if err != nil {
+		return fmt.Errorf("get paths: %w", err)
+	}
+
+	chainPath := paths.ChainFile(teamName)
+	teamChain, err := chain.Load(chainPath)
+	if err != nil {
+		return fmt.Errorf("load project: %w", err)
+	}
+
+	policy := teamChain.Policy()
+
+	// Check if environment exists
+	if !policy.IsValidEnvironment(envName) {
+		return fmt.Errorf("environment '%s' does not exist", envName)
+	}
+
+	// Can't remove the last environment
+	if len(policy.Environments) == 1 {
+		return fmt.Errorf("cannot delete the last environment")
+	}
+
+	// Check if any members have access
+	membersWithAccess := teamChain.MembersWithEnvAccess(envName)
+	if len(membersWithAccess) > 0 && !force {
+		names := make([]string, len(membersWithAccess))
+		for i, m := range membersWithAccess {
+			names[i] = m.Name
+		}
+		return fmt.Errorf("%d members have access to '%s': %s. Use --force to revoke and delete",
+			len(membersWithAccess), envName, strings.Join(names, ", "))
+	}
+
+	// Load identity
+	passphrase, err := tui.ReadPassword("Passphrase: ")
+	if err != nil {
+		return fmt.Errorf("read passphrase: %w", err)
+	}
+
+	identity, err := crypto.LoadEncrypted(paths.IdentityFile, passphrase)
+	crypto.ZeroBytes(passphrase)
+	if err != nil {
+		return fmt.Errorf("load identity: %w", err)
+	}
+
+	// Check permission
+	if err := teamChain.CanPropose(chain.ActionRemoveEnv, identity.SigningPublicKey()); err != nil {
+		return fmt.Errorf("cannot delete environment: %w", err)
+	}
+
+	// Create remove env subject
+	subject := chain.EnvChange{
+		Environment: envName,
+	}
+
+	head := teamChain.Head()
+	block, err := chain.NewBlock(head, chain.ActionRemoveEnv, subject, identity)
+	if err != nil {
+		return fmt.Errorf("create block: %w", err)
+	}
+
+	status := teamChain.GetApprovalStatus(block)
+	if status.Required > 0 {
+		fmt.Printf("Proposal created. Requires %d approval(s).\n", status.Required)
+	} else {
+		if err := teamChain.AppendBlock(block); err != nil {
+			return fmt.Errorf("append block: %w", err)
+		}
+		if err := teamChain.Save(chainPath); err != nil {
+			return fmt.Errorf("save chain: %w", err)
+		}
+		client.NotifyChainChange()
+		fmt.Printf("Deleted environment '%s'\n", envName)
 	}
 
 	return nil

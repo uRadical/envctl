@@ -33,6 +33,9 @@ type Client struct {
 	connected atomic.Bool
 	lastError error
 
+	// Callback when connection drops (for reconnection)
+	onDisconnect func()
+
 	// For request/response correlation
 	pendingMu sync.Mutex
 	pending   map[string]chan *Envelope
@@ -65,15 +68,17 @@ type Status struct {
 }
 
 // Connect establishes a connection to the relay server and authenticates.
-func Connect(ctx context.Context, url string, fingerprint string, signingKey ed25519.PrivateKey, publicKey ed25519.PublicKey) (*Client, error) {
+// The onDisconnect callback is called when the connection drops unexpectedly.
+func Connect(ctx context.Context, url string, fingerprint string, signingKey ed25519.PrivateKey, publicKey ed25519.PublicKey, onDisconnect func()) (*Client, error) {
 	c := &Client{
-		url:         url,
-		fingerprint: fingerprint,
-		signingKey:  signingKey,
-		publicKey:   publicKey,
-		sendCh:      make(chan *Envelope, 100),
-		done:        make(chan struct{}),
-		pending:     make(map[string]chan *Envelope),
+		url:          url,
+		fingerprint:  fingerprint,
+		signingKey:   signingKey,
+		publicKey:    publicKey,
+		sendCh:       make(chan *Envelope, 100),
+		done:         make(chan struct{}),
+		pending:      make(map[string]chan *Envelope),
+		onDisconnect: onDisconnect,
 	}
 
 	if err := c.connect(ctx); err != nil {
@@ -244,6 +249,14 @@ func (c *Client) sendLoop() {
 }
 
 func (c *Client) receiveLoop() {
+	defer func() {
+		wasConnected := c.connected.Swap(false)
+		// Only call onDisconnect if we were connected (not a graceful close)
+		if wasConnected && c.onDisconnect != nil {
+			c.onDisconnect()
+		}
+	}()
+
 	for {
 		select {
 		case <-c.done:
@@ -255,7 +268,6 @@ func (c *Client) receiveLoop() {
 		if err != nil {
 			slog.Debug("relay receive error", "error", err)
 			c.lastError = err
-			c.connected.Store(false)
 			return
 		}
 

@@ -1178,8 +1178,8 @@ func (h *Handlers) handleOpsChainPull(ctx context.Context, d *Daemon, client *IP
 // Ops chain push handler - pushes ops to peers
 func (h *Handlers) handleOpsChainPush(ctx context.Context, d *Daemon, client *IPCClient, params json.RawMessage) (interface{}, error) {
 	var req struct {
-		Project     string   `json:"project"`
-		Environment string   `json:"environment"`
+		Project     string                  `json:"project"`
+		Environment string                  `json:"environment"`
 		Operations  []protocol.OpsOperation `json:"operations"`
 	}
 	if err := json.Unmarshal(params, &req); err != nil {
@@ -1194,15 +1194,6 @@ func (h *Handlers) handleOpsChainPush(ctx context.Context, d *Daemon, client *IP
 	}
 	if len(req.Operations) == 0 {
 		return nil, fmt.Errorf("no operations to push")
-	}
-
-	// Find peers who are members of this project
-	peers := d.peerManager.GetProjectPeers(req.Project)
-	if len(peers) == 0 {
-		return map[string]interface{}{
-			"success": false,
-			"error":   "no connected peers for this project",
-		}, nil
 	}
 
 	// Create push message
@@ -1220,19 +1211,16 @@ func (h *Handlers) handleOpsChainPush(ctx context.Context, d *Daemon, client *IP
 	}
 	msg.Sign(d.identity.SigningPrivateKey())
 
-	// Broadcast to all project peers
-	sent := 0
-	for _, peer := range peers {
-		if err := d.peerManager.Send(peer, msg); err != nil {
-			continue
-		}
-		sent++
-	}
+	// Broadcast to all team members (connected peers via P2P, offline via relay)
+	d.peerManager.BroadcastToTeam(req.Project, msg)
+
+	// Count connected peers for response
+	peers := d.peerManager.GetProjectPeers(req.Project)
 
 	return map[string]interface{}{
 		"success":    true,
 		"request_id": requestID,
-		"sent_to":    sent,
+		"sent_to":    len(peers),
 		"total_ops":  len(req.Operations),
 	}, nil
 }

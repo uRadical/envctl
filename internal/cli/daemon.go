@@ -184,23 +184,47 @@ func runDaemonStart(cmd *cobra.Command, args []string) error {
 	daemonCmd.Stdout = os.Stdout
 	daemonCmd.Stderr = os.Stderr
 
-	// Start in background
+	// Start the daemon process - this will prompt for passphrase if needed
 	if err := daemonCmd.Start(); err != nil {
 		return fmt.Errorf("start daemon: %w", err)
 	}
 
-	// Wait a bit for daemon to start
-	time.Sleep(2 * time.Second)
+	// Create a channel to signal when daemon exits
+	done := make(chan error, 1)
+	go func() {
+		done <- daemonCmd.Wait()
+	}()
 
-	// Check if it's running
-	if client.IsRunning() {
-		fmt.Printf("Daemon started (PID %d).\n", daemonCmd.Process.Pid)
-		fmt.Println("Use 'envctl daemon status' for details.")
-	} else {
-		fmt.Println("Daemon may have failed to start. Check logs.")
+	// Wait for daemon to start (poll for IPC socket) or exit
+	// Give plenty of time for passphrase entry
+	timeout := time.After(60 * time.Second)
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case err := <-done:
+			// Daemon exited - this means it failed (passphrase wrong, etc.)
+			if err != nil {
+				return fmt.Errorf("daemon failed to start: %w", err)
+			}
+			return fmt.Errorf("daemon exited unexpectedly")
+
+		case <-ticker.C:
+			// Check if daemon is now running
+			if client.IsRunning() {
+				fmt.Printf("Daemon started (PID %d).\n", daemonCmd.Process.Pid)
+				fmt.Println("Use 'envctl daemon status' for details.")
+				return nil
+			}
+
+		case <-timeout:
+			// Timeout waiting for daemon
+			fmt.Println("Timeout waiting for daemon to start.")
+			fmt.Println("The daemon process may still be running in the background.")
+			return nil
+		}
 	}
-
-	return nil
 }
 
 var daemonStopCmd = &cobra.Command{

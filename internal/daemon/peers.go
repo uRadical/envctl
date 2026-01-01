@@ -2493,20 +2493,10 @@ func (pm *PeerManager) handleOpsPushFromRelay(project string, msg *protocol.Mess
 		return
 	}
 
-	// Load the ops chain
-	oc, err := ocm.LoadChain(push.Project, push.Environment)
-	if err != nil {
-		slog.Warn("Failed to load ops chain for relay ops",
-			"project", push.Project,
-			"env", push.Environment,
-			"error", err,
-		)
-		return
-	}
-
-	// Process each operation
+	// Convert protocol operations to ExportedOps for ImportOps
+	// This ensures plaintext values are properly cached
+	exportedOps := make([]*opschain.ExportedOp, 0, len(push.Operations))
 	for _, op := range push.Operations {
-		// Convert protocol operation to opschain operation
 		opsOp := &opschain.Operation{
 			Seq:            op.Seq,
 			Timestamp:      time.Unix(0, op.Timestamp),
@@ -2518,24 +2508,36 @@ func (pm *PeerManager) handleOpsPushFromRelay(project string, msg *protocol.Mess
 			Signature:      op.Signature,
 		}
 
-		// Append without verification (since relay messages are from authenticated peers)
-		if err := oc.AppendWithoutVerification(opsOp); err != nil {
-			slog.Debug("Failed to append operation from relay",
-				"error", err,
-				"seq", op.Seq,
-			)
-			continue
-		}
+		exportedOps = append(exportedOps, &opschain.ExportedOp{
+			Op:             opsOp,
+			PlaintextValue: op.Value, // The plaintext value sent with the push
+		})
 	}
 
-	// Save the updated chain
-	if err := ocm.SaveChain(oc); err != nil {
-		slog.Error("Failed to save ops chain after relay sync",
+	// Use ImportOps which properly handles value caching
+	merged, conflict, err := ocm.ImportOps(push.Project, push.Environment, exportedOps)
+	if err != nil {
+		slog.Error("Failed to import ops from relay",
 			"project", push.Project,
 			"env", push.Environment,
 			"error", err,
 		)
+		return
 	}
+
+	if conflict != nil {
+		slog.Warn("Conflict detected in relay ops",
+			"project", push.Project,
+			"env", push.Environment,
+			"seq", conflict.Seq,
+		)
+	}
+
+	slog.Debug("Imported ops from relay",
+		"project", push.Project,
+		"env", push.Environment,
+		"merged", merged,
+	)
 }
 
 // Broadcast sends a message to all connected peers

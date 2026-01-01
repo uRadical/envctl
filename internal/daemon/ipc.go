@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"envctl.dev/go/envctl/internal/chain"
 	"envctl.dev/go/envctl/internal/protocol"
 )
 
@@ -291,6 +292,7 @@ var ipcHandlers = map[string]IPCHandler{
 	"relay.project_status":        handleRelayProjectStatus,
 	"relay.connect":               handleRelayConnect,
 	"relay.disconnect":            handleRelayDisconnect,
+	"relay.set":                   handleRelaySet,
 }
 
 // Handler implementations
@@ -505,5 +507,101 @@ func handleRelayDisconnect(ctx context.Context, d *Daemon, client *IPCClient, pa
 	return map[string]interface{}{
 		"disconnected": true,
 		"project":      project,
+	}, nil
+}
+
+func handleRelaySet(ctx context.Context, d *Daemon, client *IPCClient, params json.RawMessage) (interface{}, error) {
+	var req struct {
+		Project string `json:"project"`
+		URL     string `json:"url"`
+		Disable bool   `json:"disable"`
+	}
+	if err := json.Unmarshal(params, &req); err != nil {
+		return nil, fmt.Errorf("invalid params: %w", err)
+	}
+
+	teamChain := d.GetChain(req.Project)
+	if teamChain == nil {
+		return nil, fmt.Errorf("project not found: %s", req.Project)
+	}
+
+	// Check if we're an admin
+	myPub := d.identity.SigningPublicKey()
+	if !teamChain.IsAdmin(myPub) {
+		return nil, fmt.Errorf("only admins can configure relay settings")
+	}
+
+	// Get current policy and update it
+	currentPolicy := teamChain.Policy()
+	if currentPolicy == nil {
+		return nil, fmt.Errorf("project has no policy")
+	}
+
+	// Create updated policy
+	newPolicy := *currentPolicy
+	if req.Disable {
+		newPolicy.AllowRelay = false
+		newPolicy.Relay = ""
+	} else {
+		newPolicy.AllowRelay = true
+		newPolicy.Relay = req.URL
+	}
+
+	// Create the block
+	head := teamChain.Head()
+	block, err := chain.NewBlock(head, chain.ActionUpdatePolicy, &newPolicy, d.identity)
+	if err != nil {
+		return nil, fmt.Errorf("create block: %w", err)
+	}
+
+	// For solo mode or single member, commit directly
+	memberCount := len(teamChain.Members())
+	if currentPolicy.SoloMode || memberCount == 1 {
+		if err := teamChain.AppendBlock(block); err != nil {
+			return nil, fmt.Errorf("append block: %w", err)
+		}
+
+		// Save the chain
+		chainPath := d.paths.ChainFile(req.Project)
+		if err := teamChain.Save(chainPath); err != nil {
+			return nil, fmt.Errorf("save chain: %w", err)
+		}
+
+		// Connect to relay if enabled
+		if !req.Disable && req.URL != "" {
+			rm := d.RelayManager()
+			if rm != nil {
+				// Try to connect, but don't fail if it doesn't work
+				go func() {
+					if err := rm.ConnectProject(req.Project, req.URL); err != nil {
+						slog.Warn("failed to connect to relay after enabling", "project", req.Project, "error", err)
+					}
+				}()
+			}
+		}
+
+		action := "enabled"
+		if req.Disable {
+			action = "disabled"
+		}
+
+		return map[string]interface{}{
+			"success": true,
+			"project": req.Project,
+			"action":  action,
+			"url":     req.URL,
+		}, nil
+	}
+
+	// Create proposal for multi-admin teams
+	if err := d.peerManager.CreateProposal(req.Project, block); err != nil {
+		return nil, fmt.Errorf("create proposal: %w", err)
+	}
+
+	return map[string]interface{}{
+		"success":  false,
+		"pending":  true,
+		"project":  req.Project,
+		"message":  "relay configuration proposal created, awaiting approval from team members",
 	}, nil
 }

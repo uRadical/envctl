@@ -20,8 +20,8 @@ func init() {
 	teamCmd.Aliases = []string{}
 	teamCmd.Hidden = true
 
-	// Add --project flag as alias for --team on project command
-	projectCmd.PersistentFlags().StringVar(&projectNameFlag, "project", "", "project name (overrides .envctl file)")
+	// Add --project/-p flag as alias for --team on project command
+	projectCmd.PersistentFlags().StringVarP(&projectNameFlag, "project", "p", "", "project name (overrides .envctl file)")
 
 	// Copy all subcommands from team to project
 	projectCmd.AddCommand(projectCreateCmd)
@@ -38,7 +38,6 @@ func init() {
 	projectCmd.AddCommand(projectApproveCmd)
 	projectCmd.AddCommand(projectDenyCmd)
 	projectCmd.AddCommand(projectLogCmd)
-	projectCmd.AddCommand(projectEnvCmd)
 	projectCmd.AddCommand(projectDissolveCmd)
 	projectCmd.AddCommand(projectInvitesCmd)
 	projectCmd.AddCommand(projectInviteRevokeCmd)
@@ -71,13 +70,6 @@ func init() {
 
 	projectRevokeCmd.Flags().StringVar(&teamEnvFlag, "env", "", "environments to revoke (comma-separated)")
 	projectRevokeCmd.MarkFlagRequired("env")
-
-	// Project env subcommands
-	projectEnvCmd.AddCommand(projectEnvListCmd)
-	projectEnvCmd.AddCommand(projectEnvAddCmd)
-	projectEnvCmd.AddCommand(projectEnvRemoveCmd)
-
-	projectEnvRemoveCmd.Flags().BoolVar(&teamForceFlag, "force", false, "force remove and revoke access from members")
 
 	// Project link command
 	projectCmd.AddCommand(projectLinkCmd)
@@ -306,37 +298,6 @@ Examples:
   envctl project revoke-invite ABC-DEF-GHI --reason "Wrong person"`,
 	Args: cobra.ExactArgs(1),
 	RunE: runTeamInviteRevoke,
-}
-
-// Project env subcommands
-
-var projectEnvCmd = &cobra.Command{
-	Use:   "env",
-	Short: "Manage project environments",
-	Long: `Manage the environments available for a project.
-
-Environments define the access levels for project members (e.g., dev, stage, prod).
-Each member can be granted access to specific environments.`,
-}
-
-var projectEnvListCmd = &cobra.Command{
-	Use:   "list",
-	Short: "List project environments",
-	RunE:  runTeamEnvList,
-}
-
-var projectEnvAddCmd = &cobra.Command{
-	Use:   "add <environment>",
-	Short: "Add a new environment to the project",
-	Args:  cobra.ExactArgs(1),
-	RunE:  runTeamEnvAdd,
-}
-
-var projectEnvRemoveCmd = &cobra.Command{
-	Use:   "remove <environment>",
-	Short: "Remove an environment from the project",
-	Args:  cobra.ExactArgs(1),
-	RunE:  runTeamEnvRemove,
 }
 
 var projectLinkCmd = &cobra.Command{
