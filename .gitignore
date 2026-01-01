@@ -1,0 +1,8 @@
+
+# envctl - secrets management
+.envctl/
+.env
+.env.*
+!.env.example
+
+envctl
