@@ -33,6 +33,7 @@ and switching between them via symlinks.
 * [envctl env delete](envctl_env_delete.md)	 - Delete an environment from the project
 * [envctl env edit](envctl_env_edit.md)	 - Edit environment variables in your editor
 * [envctl env list](envctl_env_list.md)	 - List environments in the project
+* [envctl env shell](envctl_env_shell.md)	 - Start a shell with environment variables applied
 * [envctl env use](envctl_env_use.md)	 - Switch to a different environment
 * [envctl env var](envctl_env_var.md)	 - Manage environment variables via operations chain
 

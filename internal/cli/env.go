@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 
@@ -24,6 +25,7 @@ func init() {
 	envCmd.AddCommand(envListCmd)
 	envCmd.AddCommand(envUseCmd)
 	envCmd.AddCommand(envApplyCmd)
+	envCmd.AddCommand(envShellCmd)
 	envCmd.AddCommand(envCurrentCmd)
 	envCmd.AddCommand(envEditCmd)
 	envCmd.AddCommand(envClearCmd)
@@ -34,6 +36,7 @@ func init() {
 	envCurrentCmd.Flags().Bool("prompt", false, "output for shell prompt")
 	envEditCmd.Flags().StringP("env", "e", "", "target environment (default: current environment)")
 	envApplyCmd.Flags().StringP("env", "e", "", "target environment (default: current environment)")
+	envShellCmd.Flags().StringP("env", "e", "", "target environment (default: current environment)")
 	envDeleteCmd.Flags().Bool("force", false, "force remove and revoke access from members")
 }
 
@@ -347,6 +350,121 @@ func runEnvApply(cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
+}
+
+var envShellCmd = &cobra.Command{
+	Use:   "shell",
+	Short: "Start a shell with environment variables applied",
+	Long: `Start an interactive shell with environment variables from the ops chain applied.
+
+Unlike 'env use', this command does NOT write a .env file to disk.
+Instead, it decrypts the variables and starts a new shell with them
+set in the environment. This is more secure as secrets never touch
+the filesystem.
+
+The shell used matches your current shell ($SHELL on Unix, or
+PowerShell/cmd on Windows). Type 'exit' to leave the shell and
+clear the secrets from memory.
+
+Examples:
+  envctl env shell           # Start shell with current env's secrets
+  envctl env shell -e prod   # Start shell with prod secrets`,
+	RunE: runEnvShell,
+}
+
+func runEnvShell(cmd *cobra.Command, args []string) error {
+	project, environment, err := getProjectAndEnv(cmd)
+	if err != nil {
+		return err
+	}
+
+	// Load identity
+	paths, err := config.GetPaths()
+	if err != nil {
+		return fmt.Errorf("get paths: %w", err)
+	}
+
+	if !paths.IdentityExists() {
+		return fmt.Errorf("no identity found. Run 'envctl init' first")
+	}
+
+	passphrase, err := tui.ReadPassword("Passphrase: ")
+	if err != nil {
+		return fmt.Errorf("read passphrase: %w", err)
+	}
+
+	identity, err := crypto.LoadEncrypted(paths.IdentityFile, passphrase)
+	crypto.ZeroBytes(passphrase)
+	if err != nil {
+		return fmt.Errorf("load identity: %w", err)
+	}
+
+	// Load variables from ops chain
+	manager := opschain.NewManager(paths.ChainsDir, paths.TempDir, identity)
+
+	vars, err := manager.List(project, environment)
+	if err != nil {
+		return fmt.Errorf("list variables: %w", err)
+	}
+
+	// Detect user's shell
+	shell := getUserShell()
+
+	// Build environment for subprocess
+	env := os.Environ()
+	for key, value := range vars {
+		env = append(env, fmt.Sprintf("%s=%s", key, value))
+	}
+
+	// Add marker so user knows they're in an envctl shell
+	env = append(env, fmt.Sprintf("ENVCTL_ENV=%s", environment))
+
+	fmt.Printf("Starting %s with %d secrets from %s/%s\n", filepath.Base(shell), len(vars), project, environment)
+	fmt.Printf("Type 'exit' to leave and clear secrets from memory.\n\n")
+
+	// Execute the shell
+	execCmd := exec.Command(shell)
+	execCmd.Env = env
+	execCmd.Stdin = os.Stdin
+	execCmd.Stdout = os.Stdout
+	execCmd.Stderr = os.Stderr
+
+	// Run and return exit code
+	if err := execCmd.Run(); err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			os.Exit(exitErr.ExitCode())
+		}
+		return fmt.Errorf("execute shell: %w", err)
+	}
+
+	fmt.Println("\nExited envctl shell. Secrets cleared from memory.")
+	return nil
+}
+
+// getUserShell returns the user's preferred shell
+func getUserShell() string {
+	if runtime.GOOS == "windows" {
+		// Try PowerShell first (modern Windows)
+		if pwsh, err := exec.LookPath("pwsh"); err == nil {
+			return pwsh
+		}
+		if ps, err := exec.LookPath("powershell"); err == nil {
+			return ps
+		}
+		// Fall back to cmd.exe
+		if comspec := os.Getenv("COMSPEC"); comspec != "" {
+			return comspec
+		}
+		return "cmd.exe"
+	}
+
+	// Unix: use $SHELL
+	if shell := os.Getenv("SHELL"); shell != "" {
+		return shell
+	}
+
+	// Fallback
+	return "/bin/sh"
 }
 
 var envCurrentCmd = &cobra.Command{
