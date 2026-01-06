@@ -15,9 +15,16 @@ The shell used matches your current shell ($SHELL on Unix, or
 PowerShell/cmd on Windows). Type 'exit' to leave the shell and
 clear the secrets from memory.
 
+Local overrides:
+If a file named .env.<environment> exists (e.g., .env.dev), variables
+defined there will override the shared secrets from the ops chain.
+This is useful for personal settings like local database URLs.
+Use --no-overrides to ignore local override files.
+
 Examples:
-  envctl env shell           # Start shell with current env's secrets
-  envctl env shell -e prod   # Start shell with prod secrets
+  envctl env shell              # Start shell with current env's secrets
+  envctl env shell -e prod      # Start shell with prod secrets
+  envctl env shell --no-overrides  # Ignore local overrides
 
 ```
 envctl env shell [flags]
@@ -26,8 +33,9 @@ envctl env shell [flags]
 ### Options
 
 ```
-  -e, --env string   target environment (default: current environment)
-  -h, --help         help for shell
+  -e, --env string     target environment (default: current environment)
+  -h, --help           help for shell
+      --no-overrides   ignore local .env.<environment> override file
 ```
 
 ### Options inherited from parent commands

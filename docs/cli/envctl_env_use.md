@@ -11,9 +11,16 @@ This command:
 2. Exports all variables for the environment to .env
 3. Updates .envctl to track the current environment
 
+Local overrides:
+If a file named .env.<environment> exists (e.g., .env.dev), variables
+defined there will override the shared secrets from the ops chain.
+This is useful for personal settings like local database URLs.
+Use --no-overrides to ignore local override files.
+
 Examples:
-  envctl env use dev      # Export dev variables to .env
-  envctl env use prod     # Export prod variables to .env
+  envctl env use dev              # Export dev variables to .env
+  envctl env use prod             # Export prod variables to .env
+  envctl env use dev --no-overrides  # Ignore .env.dev overrides
 
 ```
 envctl env use <name> [flags]
@@ -22,7 +29,8 @@ envctl env use <name> [flags]
 ### Options
 
 ```
-  -h, --help   help for use
+  -h, --help           help for use
+      --no-overrides   ignore local .env.<environment> override file
 ```
 
 ### Options inherited from parent commands

@@ -36,7 +36,10 @@ func init() {
 	envCurrentCmd.Flags().Bool("prompt", false, "output for shell prompt")
 	envEditCmd.Flags().StringP("env", "e", "", "target environment (default: current environment)")
 	envApplyCmd.Flags().StringP("env", "e", "", "target environment (default: current environment)")
+	envApplyCmd.Flags().Bool("no-overrides", false, "ignore local .env.<environment> override file")
 	envShellCmd.Flags().StringP("env", "e", "", "target environment (default: current environment)")
+	envShellCmd.Flags().Bool("no-overrides", false, "ignore local .env.<environment> override file")
+	envUseCmd.Flags().Bool("no-overrides", false, "ignore local .env.<environment> override file")
 	envDeleteCmd.Flags().Bool("force", false, "force remove and revoke access from members")
 }
 
@@ -120,9 +123,16 @@ This command:
 2. Exports all variables for the environment to .env
 3. Updates .envctl to track the current environment
 
+Local overrides:
+If a file named .env.<environment> exists (e.g., .env.dev), variables
+defined there will override the shared secrets from the ops chain.
+This is useful for personal settings like local database URLs.
+Use --no-overrides to ignore local override files.
+
 Examples:
-  envctl env use dev      # Export dev variables to .env
-  envctl env use prod     # Export prod variables to .env`,
+  envctl env use dev              # Export dev variables to .env
+  envctl env use prod             # Export prod variables to .env
+  envctl env use dev --no-overrides  # Ignore .env.dev overrides`,
 	Args: cobra.ExactArgs(1),
 	RunE: runEnvUse,
 }
@@ -200,6 +210,13 @@ func runEnvUse(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("list variables: %w", err)
 	}
 
+	// Apply local overrides from .env.<environment> (unless --no-overrides)
+	overrideCount := 0
+	noOverrides, _ := cmd.Flags().GetBool("no-overrides")
+	if !noOverrides {
+		vars, overrideCount = loadEnvWithOverrides(cwd, envName, vars)
+	}
+
 	if len(vars) == 0 {
 		fmt.Printf("No variables found for %s/%s\n", project, envName)
 		return nil
@@ -254,6 +271,9 @@ func runEnvUse(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Printf("Exported %d variables to .env\n", len(vars))
+	if overrideCount > 0 {
+		fmt.Printf("Applied %d override(s) from .env.%s\n", overrideCount, envName)
+	}
 
 	// Update .envctl
 	projectConfig.Env = envName
@@ -277,12 +297,18 @@ the filesystem.
 The variables are only accessible to the spawned process and its
 children. They are not visible to other processes on the system.
 
+Local overrides:
+If a file named .env.<environment> exists (e.g., .env.dev), variables
+defined there will override the shared secrets from the ops chain.
+This is useful for personal settings like local database URLs.
+Use --no-overrides to ignore local override files.
+
 Use '--' to separate envctl flags from the command to run.
 
 Examples:
   envctl env apply -- npm start
   envctl env apply -e prod -- ./deploy.sh
-  envctl env apply -- python manage.py runserver
+  envctl env apply --no-overrides -- npm start
   envctl env apply -- sh -c 'echo $MY_SECRET'`,
 	Args: cobra.MinimumNArgs(1),
 	RunE: runEnvApply,
@@ -291,6 +317,11 @@ Examples:
 func runEnvApply(cmd *cobra.Command, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no command specified")
+	}
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("get working directory: %w", err)
 	}
 
 	project, environment, err := getProjectAndEnv(cmd)
@@ -325,6 +356,16 @@ func runEnvApply(cmd *cobra.Command, args []string) error {
 	vars, err := manager.List(project, environment)
 	if err != nil {
 		return fmt.Errorf("list variables: %w", err)
+	}
+
+	// Apply local overrides from .env.<environment> (unless --no-overrides)
+	overrideCount := 0
+	noOverrides, _ := cmd.Flags().GetBool("no-overrides")
+	if !noOverrides {
+		vars, overrideCount = loadEnvWithOverrides(cwd, environment, vars)
+		if overrideCount > 0 {
+			fmt.Printf("Applied %d override(s) from .env.%s\n", overrideCount, environment)
+		}
 	}
 
 	// Build environment for subprocess
@@ -366,13 +407,25 @@ The shell used matches your current shell ($SHELL on Unix, or
 PowerShell/cmd on Windows). Type 'exit' to leave the shell and
 clear the secrets from memory.
 
+Local overrides:
+If a file named .env.<environment> exists (e.g., .env.dev), variables
+defined there will override the shared secrets from the ops chain.
+This is useful for personal settings like local database URLs.
+Use --no-overrides to ignore local override files.
+
 Examples:
-  envctl env shell           # Start shell with current env's secrets
-  envctl env shell -e prod   # Start shell with prod secrets`,
+  envctl env shell              # Start shell with current env's secrets
+  envctl env shell -e prod      # Start shell with prod secrets
+  envctl env shell --no-overrides  # Ignore local overrides`,
 	RunE: runEnvShell,
 }
 
 func runEnvShell(cmd *cobra.Command, args []string) error {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("get working directory: %w", err)
+	}
+
 	project, environment, err := getProjectAndEnv(cmd)
 	if err != nil {
 		return err
@@ -407,6 +460,13 @@ func runEnvShell(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("list variables: %w", err)
 	}
 
+	// Apply local overrides from .env.<environment> (unless --no-overrides)
+	overrideCount := 0
+	noOverrides, _ := cmd.Flags().GetBool("no-overrides")
+	if !noOverrides {
+		vars, overrideCount = loadEnvWithOverrides(cwd, environment, vars)
+	}
+
 	// Detect user's shell
 	shell := getUserShell()
 
@@ -420,6 +480,9 @@ func runEnvShell(cmd *cobra.Command, args []string) error {
 	env = append(env, fmt.Sprintf("ENVCTL_ENV=%s", environment))
 
 	fmt.Printf("Starting %s with %d secrets from %s/%s\n", filepath.Base(shell), len(vars), project, environment)
+	if overrideCount > 0 {
+		fmt.Printf("Applied %d override(s) from .env.%s\n", overrideCount, environment)
+	}
 	fmt.Printf("Type 'exit' to leave and clear secrets from memory.\n\n")
 
 	// Execute the shell
@@ -784,6 +847,27 @@ func parseEnvFile(path string) (map[string]string, error) {
 	}
 
 	return vars, scanner.Err()
+}
+
+// loadEnvWithOverrides loads variables from the ops chain and applies local overrides from .env.<environment>
+// Returns the merged variables and count of overrides applied
+func loadEnvWithOverrides(cwd, environment string, vars map[string]string) (map[string]string, int) {
+	overridePath := filepath.Join(cwd, ".env."+environment)
+
+	overrides, err := parseEnvFile(overridePath)
+	if err != nil {
+		// File doesn't exist or can't be read - that's fine, just use ops chain values
+		return vars, 0
+	}
+
+	// Apply overrides
+	overrideCount := 0
+	for key, value := range overrides {
+		vars[key] = value
+		overrideCount++
+	}
+
+	return vars, overrideCount
 }
 
 // ensureGitignore ensures .envctl/ and .env are in .gitignore

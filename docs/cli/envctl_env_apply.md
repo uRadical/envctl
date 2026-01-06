@@ -14,12 +14,18 @@ the filesystem.
 The variables are only accessible to the spawned process and its
 children. They are not visible to other processes on the system.
 
+Local overrides:
+If a file named .env.<environment> exists (e.g., .env.dev), variables
+defined there will override the shared secrets from the ops chain.
+This is useful for personal settings like local database URLs.
+Use --no-overrides to ignore local override files.
+
 Use '--' to separate envctl flags from the command to run.
 
 Examples:
   envctl env apply -- npm start
   envctl env apply -e prod -- ./deploy.sh
-  envctl env apply -- python manage.py runserver
+  envctl env apply --no-overrides -- npm start
   envctl env apply -- sh -c 'echo $MY_SECRET'
 
 ```
@@ -29,8 +35,9 @@ envctl env apply [flags] -- <command> [args...]
 ### Options
 
 ```
-  -e, --env string   target environment (default: current environment)
-  -h, --help         help for apply
+  -e, --env string     target environment (default: current environment)
+  -h, --help           help for apply
+      --no-overrides   ignore local .env.<environment> override file
 ```
 
 ### Options inherited from parent commands

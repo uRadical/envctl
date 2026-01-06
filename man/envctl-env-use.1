@@ -22,15 +22,27 @@ This command:
 3. Updates .envctl to track the current environment
 
 .PP
+Local overrides:
+If a file named .env. exists (e.g., .env.dev), variables
+defined there will override the shared secrets from the ops chain.
+This is useful for personal settings like local database URLs.
+Use --no-overrides to ignore local override files.
+
+.PP
 Examples:
-  envctl env use dev      # Export dev variables to .env
-  envctl env use prod     # Export prod variables to .env
+  envctl env use dev              # Export dev variables to .env
+  envctl env use prod             # Export prod variables to .env
+  envctl env use dev --no-overrides  # Ignore .env.dev overrides
 
 
 .SH OPTIONS
 .PP
 \fB-h\fP, \fB--help\fP[=false]
 	help for use
+
+.PP
+\fB--no-overrides\fP[=false]
+	ignore local .env. override file
 
 
 .SH OPTIONS INHERITED FROM PARENT COMMANDS

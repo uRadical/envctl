@@ -27,9 +27,17 @@ PowerShell/cmd on Windows). Type 'exit' to leave the shell and
 clear the secrets from memory.
 
 .PP
+Local overrides:
+If a file named .env. exists (e.g., .env.dev), variables
+defined there will override the shared secrets from the ops chain.
+This is useful for personal settings like local database URLs.
+Use --no-overrides to ignore local override files.
+
+.PP
 Examples:
-  envctl env shell           # Start shell with current env's secrets
-  envctl env shell -e prod   # Start shell with prod secrets
+  envctl env shell              # Start shell with current env's secrets
+  envctl env shell -e prod      # Start shell with prod secrets
+  envctl env shell --no-overrides  # Ignore local overrides
 
 
 .SH OPTIONS
@@ -40,6 +48,10 @@ Examples:
 .PP
 \fB-h\fP, \fB--help\fP[=false]
 	help for shell
+
+.PP
+\fB--no-overrides\fP[=false]
+	ignore local .env. override file
 
 
 .SH OPTIONS INHERITED FROM PARENT COMMANDS

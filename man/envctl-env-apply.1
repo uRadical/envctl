@@ -26,13 +26,20 @@ The variables are only accessible to the spawned process and its
 children. They are not visible to other processes on the system.
 
 .PP
+Local overrides:
+If a file named .env. exists (e.g., .env.dev), variables
+defined there will override the shared secrets from the ops chain.
+This is useful for personal settings like local database URLs.
+Use --no-overrides to ignore local override files.
+
+.PP
 Use '--' to separate envctl flags from the command to run.
 
 .PP
 Examples:
   envctl env apply -- npm start
   envctl env apply -e prod -- ./deploy.sh
-  envctl env apply -- python manage.py runserver
+  envctl env apply --no-overrides -- npm start
   envctl env apply -- sh -c 'echo $MY_SECRET'
 
 
@@ -44,6 +51,10 @@ Examples:
 .PP
 \fB-h\fP, \fB--help\fP[=false]
 	help for apply
+
+.PP
+\fB--no-overrides\fP[=false]
+	ignore local .env. override file
 
 
 .SH OPTIONS INHERITED FROM PARENT COMMANDS
