@@ -23,6 +23,7 @@ func init() {
 
 	envCmd.AddCommand(envListCmd)
 	envCmd.AddCommand(envUseCmd)
+	envCmd.AddCommand(envApplyCmd)
 	envCmd.AddCommand(envCurrentCmd)
 	envCmd.AddCommand(envEditCmd)
 	envCmd.AddCommand(envClearCmd)
@@ -32,6 +33,7 @@ func init() {
 
 	envCurrentCmd.Flags().Bool("prompt", false, "output for shell prompt")
 	envEditCmd.Flags().StringP("env", "e", "", "target environment (default: current environment)")
+	envApplyCmd.Flags().StringP("env", "e", "", "target environment (default: current environment)")
 	envDeleteCmd.Flags().Bool("force", false, "force remove and revoke access from members")
 }
 
@@ -254,6 +256,94 @@ func runEnvUse(cmd *cobra.Command, args []string) error {
 	projectConfig.Env = envName
 	if err := config.SaveProjectConfig(cwd, projectConfig); err != nil {
 		fmt.Printf("Warning: could not update .envctl: %v\n", err)
+	}
+
+	return nil
+}
+
+var envApplyCmd = &cobra.Command{
+	Use:   "apply [flags] -- <command> [args...]",
+	Short: "Run a command with environment variables applied",
+	Long: `Run a command with environment variables from the ops chain applied.
+
+Unlike 'env use', this command does NOT write a .env file to disk.
+Instead, it decrypts the variables and passes them directly to the
+subprocess environment. This is more secure as secrets never touch
+the filesystem.
+
+The variables are only accessible to the spawned process and its
+children. They are not visible to other processes on the system.
+
+Use '--' to separate envctl flags from the command to run.
+
+Examples:
+  envctl env apply -- npm start
+  envctl env apply -e prod -- ./deploy.sh
+  envctl env apply -- python manage.py runserver
+  envctl env apply -- sh -c 'echo $MY_SECRET'`,
+	Args: cobra.MinimumNArgs(1),
+	RunE: runEnvApply,
+}
+
+func runEnvApply(cmd *cobra.Command, args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("no command specified")
+	}
+
+	project, environment, err := getProjectAndEnv(cmd)
+	if err != nil {
+		return err
+	}
+
+	// Load identity
+	paths, err := config.GetPaths()
+	if err != nil {
+		return fmt.Errorf("get paths: %w", err)
+	}
+
+	if !paths.IdentityExists() {
+		return fmt.Errorf("no identity found. Run 'envctl init' first")
+	}
+
+	passphrase, err := tui.ReadPassword("Passphrase: ")
+	if err != nil {
+		return fmt.Errorf("read passphrase: %w", err)
+	}
+
+	identity, err := crypto.LoadEncrypted(paths.IdentityFile, passphrase)
+	crypto.ZeroBytes(passphrase)
+	if err != nil {
+		return fmt.Errorf("load identity: %w", err)
+	}
+
+	// Load variables from ops chain
+	manager := opschain.NewManager(paths.ChainsDir, paths.TempDir, identity)
+
+	vars, err := manager.List(project, environment)
+	if err != nil {
+		return fmt.Errorf("list variables: %w", err)
+	}
+
+	// Build environment for subprocess
+	// Start with current environment and add/override with our vars
+	env := os.Environ()
+	for key, value := range vars {
+		env = append(env, fmt.Sprintf("%s=%s", key, value))
+	}
+
+	// Execute the command
+	execCmd := exec.Command(args[0], args[1:]...)
+	execCmd.Env = env
+	execCmd.Stdin = os.Stdin
+	execCmd.Stdout = os.Stdout
+	execCmd.Stderr = os.Stderr
+
+	// Run and return exit code
+	if err := execCmd.Run(); err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			os.Exit(exitErr.ExitCode())
+		}
+		return fmt.Errorf("execute command: %w", err)
 	}
 
 	return nil
