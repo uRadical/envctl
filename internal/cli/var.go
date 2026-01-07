@@ -163,11 +163,18 @@ func runEnvVarSet(cmd *cobra.Command, args []string) error {
 	// Create manager and set variable
 	manager := opschain.NewManager(paths.ChainsDir, paths.TempDir, identity)
 
+	// Check if variable already exists
+	_, existed, _ := manager.Get(project, environment, key)
+
 	if err := manager.Set(project, environment, key, value); err != nil {
 		return fmt.Errorf("set variable: %w", err)
 	}
 
-	fmt.Printf("Set %s in %s/%s\n", key, project, environment)
+	if existed {
+		fmt.Printf("Updated %s in %s/%s\n", key, project, environment)
+	} else {
+		fmt.Printf("Set %s in %s/%s\n", key, project, environment)
+	}
 	return nil
 }
 
