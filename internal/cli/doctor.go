@@ -16,8 +16,11 @@ import (
 	"envctl.dev/go/envctl/internal/crypto"
 )
 
+var doctorFix bool
+
 func init() {
 	rootCmd.AddCommand(doctorCmd)
+	doctorCmd.Flags().BoolVar(&doctorFix, "fix", false, "automatically fix issues (e.g., remove stale socket)")
 }
 
 var doctorCmd = &cobra.Command{
@@ -25,7 +28,9 @@ var doctorCmd = &cobra.Command{
 	Short: "Check envctl health",
 	Long: `Run health checks on your envctl installation.
 
-Checks identity, daemon status, network configuration, and project chains.`,
+Checks identity, daemon status, network configuration, and project chains.
+
+Use --fix to automatically resolve common issues like stale sockets.`,
 	RunE: runDoctor,
 }
 
@@ -76,8 +81,30 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 			}
 		}
 	} else {
-		fmt.Println("  ⚠ Not running")
-		fmt.Println("    Start with: envctl daemon start")
+		// Check for stale socket
+		if runtime.GOOS != "windows" {
+			if _, err := os.Stat(paths.SocketPath); err == nil {
+				// Socket file exists but daemon is not responding - stale socket
+				fmt.Println("  ❌ Stale socket detected")
+				fmt.Printf("    Socket file exists at %s but daemon is not responding\n", paths.SocketPath)
+				if doctorFix {
+					if err := os.Remove(paths.SocketPath); err != nil {
+						fmt.Printf("    ❌ Failed to remove stale socket: %v\n", err)
+					} else {
+						fmt.Println("    ✓ Removed stale socket")
+						fmt.Println("    Start daemon with: envctl daemon start")
+					}
+				} else {
+					fmt.Println("    Run 'envctl doctor --fix' to remove it")
+				}
+			} else {
+				fmt.Println("  ⚠ Not running")
+				fmt.Println("    Start with: envctl daemon start")
+			}
+		} else {
+			fmt.Println("  ⚠ Not running")
+			fmt.Println("    Start with: envctl daemon start")
+		}
 	}
 	fmt.Println()
 

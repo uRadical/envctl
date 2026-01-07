@@ -153,7 +153,7 @@ func runEnvUse(cmd *cobra.Command, args []string) error {
 
 	project := projectConfig.Project
 	if project == "" {
-		return fmt.Errorf("no project configured in .envctl")
+		return fmt.Errorf("no project configured in .envctl. Run 'envctl project link <name>' to link a project")
 	}
 
 	// Get paths
@@ -612,7 +612,7 @@ func runEnvClear(cmd *cobra.Command, args []string) error {
 	// Find project config
 	projectConfig, err := config.LoadProjectConfig(cwd)
 	if err != nil {
-		return fmt.Errorf("not in an envctl project: %w", err)
+		return fmt.Errorf("not in an envctl project. Run 'envctl project link <name>' first")
 	}
 
 	// Remove .env file

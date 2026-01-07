@@ -95,15 +95,6 @@ Or join an existing project using an invite code:
 envctl project join ABC-DEF-GHI
 ```
 
-### 4. Unlock the Agent
-
-The passphrase agent caches your decrypted keys in memory so you don't need to enter your passphrase repeatedly:
-
-```bash
-envctl agent unlock
-# Enter passphrase once, keys cached for 4 hours (default)
-```
-
 ## Usage
 
 ### Project Setup
@@ -198,28 +189,17 @@ prompt_envctl() {
 prompt_pure_precmd_functions+=(prompt_envctl)
 ```
 
-## Passphrase Agent
+## Passphrase Management
 
-The passphrase agent keeps your decrypted identity keys in memory, so you don't need to enter your passphrase for every operation.
+To avoid entering your passphrase every time the daemon starts, use the `--keychain` flag during initialization:
 
 ```bash
-# Unlock with default 4-hour timeout
-envctl agent unlock
-
-# Unlock with custom timeout
-envctl agent unlock --timeout 8h
-
-# Check agent status
-envctl agent status
-
-# Extend timeout while unlocked
-envctl agent extend 2h
-
-# Lock immediately
-envctl agent lock
+envctl identity init --keychain
 ```
 
-The agent automatically locks after the timeout expires or when you log out.
+This stores your passphrase in the system keychain (macOS Keychain, Windows Credential Manager, or libsecret on Linux). The daemon will automatically retrieve it on startup.
+
+If you didn't use `--keychain` during init, you'll be prompted for your passphrase each time you start the daemon.
 
 ## Identity Management
 

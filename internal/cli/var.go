@@ -79,7 +79,7 @@ func getEnvironment(cmd *cobra.Command) (string, error) {
 
 	projectConfig, err := config.LoadProjectConfig(cwd)
 	if err != nil {
-		return "", fmt.Errorf("not in an envctl project: %w", err)
+		return "", fmt.Errorf("not in an envctl project. Run 'envctl project link <name>' first")
 	}
 
 	if projectConfig.Env != "" {
@@ -98,7 +98,7 @@ func getProjectAndEnv(cmd *cobra.Command) (string, string, error) {
 
 	projectConfig, err := config.LoadProjectConfig(cwd)
 	if err != nil {
-		return "", "", fmt.Errorf("not in an envctl project: %w", err)
+		return "", "", fmt.Errorf("not in an envctl project. Run 'envctl project link <name>' first")
 	}
 
 	environment, err := getEnvironment(cmd)

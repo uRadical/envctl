@@ -1172,7 +1172,7 @@ func announceRotation(rotation *crypto.KeyRotation) error {
 	// Connect to daemon and broadcast
 	c, err := client.Connect()
 	if err != nil {
-		return fmt.Errorf("daemon not running: %w", err)
+		return fmt.Errorf("daemon not running. Start with: envctl daemon start")
 	}
 	defer c.Close()
 

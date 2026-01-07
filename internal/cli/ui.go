@@ -33,7 +33,7 @@ The web UI provides a visual interface for:
 func runUI(cmd *cobra.Command, args []string) error {
 	c, err := client.Connect()
 	if err != nil {
-		return fmt.Errorf("daemon not running: %w", err)
+		return fmt.Errorf("daemon not running. Start with: envctl daemon start")
 	}
 	defer c.Close()
 

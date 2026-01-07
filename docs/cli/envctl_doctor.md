@@ -8,6 +8,8 @@ Run health checks on your envctl installation.
 
 Checks identity, daemon status, network configuration, and project chains.
 
+Use --fix to automatically resolve common issues like stale sockets.
+
 ```
 envctl doctor [flags]
 ```
@@ -15,6 +17,7 @@ envctl doctor [flags]
 ### Options
 
 ```
+      --fix    automatically fix issues (e.g., remove stale socket)
   -h, --help   help for doctor
 ```
 
