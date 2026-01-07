@@ -3,6 +3,7 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"envctl.dev/go/envctl/internal/client"
@@ -349,9 +350,12 @@ var projectRelaySetCmd = &cobra.Command{
 This creates a proposal to update the project policy with the relay URL.
 The proposal must be approved by enough admins according to project policy.
 
+The protocol (wss://) and path (/ws) are added automatically if not specified.
+
 Use --disable to disable relay for this project.
 
 Examples:
+  envctl project relay set relay.envctl.dev
   envctl project relay set wss://relay.envctl.dev/ws
   envctl project relay set --disable`,
 	Args: cobra.MaximumNArgs(1),
@@ -364,6 +368,14 @@ func runProjectRelaySet(cmd *cobra.Command, args []string) error {
 	var url string
 	if len(args) > 0 {
 		url = args[0]
+		// Auto-add wss:// if no protocol specified
+		if !strings.HasPrefix(url, "wss://") && !strings.HasPrefix(url, "ws://") {
+			url = "wss://" + url
+		}
+		// Ensure path ends with /ws if not specified
+		if !strings.Contains(url, "/ws") {
+			url = strings.TrimSuffix(url, "/") + "/ws"
+		}
 	}
 
 	if !disable && url == "" {
