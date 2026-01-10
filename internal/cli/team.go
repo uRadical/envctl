@@ -1637,9 +1637,10 @@ Each member can be granted access to specific environments.`,
 }
 
 var teamEnvListCmd = &cobra.Command{
-	Use:   "list",
-	Short: "List team environments",
-	RunE:  runTeamEnvList,
+	Use:     "list",
+	Aliases: []string{"ls"},
+	Short:   "List team environments",
+	RunE:    runTeamEnvList,
 }
 
 func runTeamEnvList(cmd *cobra.Command, args []string) error {

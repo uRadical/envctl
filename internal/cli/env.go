@@ -31,6 +31,7 @@ func init() {
 	envCmd.AddCommand(envClearCmd)
 	envCmd.AddCommand(envCreateCmd)
 	envCmd.AddCommand(envDeleteCmd)
+	envCmd.AddCommand(envCatCmd)
 	// envVarCmd is added in var.go's init()
 
 	envCurrentCmd.Flags().Bool("prompt", false, "output for shell prompt")
@@ -41,6 +42,8 @@ func init() {
 	envShellCmd.Flags().Bool("no-overrides", false, "ignore local .env.<environment> override file")
 	envUseCmd.Flags().Bool("no-overrides", false, "ignore local .env.<environment> override file")
 	envDeleteCmd.Flags().Bool("force", false, "force remove and revoke access from members")
+	envCatCmd.Flags().StringP("env", "e", "", "target environment (default: current environment)")
+	envCatCmd.Flags().Bool("no-overrides", false, "ignore local .env.<environment> override file")
 }
 
 var envCmd = &cobra.Command{
@@ -53,8 +56,9 @@ and switching between them via symlinks.`,
 }
 
 var envListCmd = &cobra.Command{
-	Use:   "list",
-	Short: "List environments in the project",
+	Use:     "list",
+	Aliases: []string{"ls"},
+	Short:   "List environments in the project",
 	Long: `List all environments available in the current project.
 
 Shows environments defined in the project chain (e.g., dev, staging, prod)
@@ -1123,6 +1127,99 @@ func runEnvDelete(cmd *cobra.Command, args []string) error {
 		}
 		client.NotifyChainChange()
 		fmt.Printf("Deleted environment '%s'\n", envName)
+	}
+
+	return nil
+}
+
+var envCatCmd = &cobra.Command{
+	Use:   "cat",
+	Short: "Print environment variables to stdout",
+	Long: `Print all environment variables for the current environment.
+
+When output is to a terminal, variables are colorized for readability.
+When piped to another command, plain KEY=VALUE format is used.
+
+Local overrides:
+If a file named .env.<environment> exists (e.g., .env.dev), variables
+defined there will override the shared secrets from the ops chain.
+Use --no-overrides to ignore local override files.
+
+Examples:
+  envctl env cat              # Print current environment
+  envctl env cat -e prod      # Print prod environment
+  envctl env cat | grep API   # Pipe to grep (no colors)`,
+	RunE: runEnvCat,
+}
+
+func runEnvCat(cmd *cobra.Command, args []string) error {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("get working directory: %w", err)
+	}
+
+	project, environment, err := getProjectAndEnv(cmd)
+	if err != nil {
+		return err
+	}
+
+	// Load identity
+	paths, err := config.GetPaths()
+	if err != nil {
+		return fmt.Errorf("get paths: %w", err)
+	}
+
+	if !paths.IdentityExists() {
+		return fmt.Errorf("no identity found. Run 'envctl init' first")
+	}
+
+	passphrase, err := tui.ReadPassword("Passphrase: ")
+	if err != nil {
+		return fmt.Errorf("read passphrase: %w", err)
+	}
+
+	identity, err := crypto.LoadEncrypted(paths.IdentityFile, passphrase)
+	crypto.ZeroBytes(passphrase)
+	if err != nil {
+		return fmt.Errorf("load identity: %w", err)
+	}
+
+	// Load variables from ops chain
+	manager := opschain.NewManager(paths.ChainsDir, paths.TempDir, identity)
+
+	vars, err := manager.List(project, environment)
+	if err != nil {
+		return fmt.Errorf("list variables: %w", err)
+	}
+
+	// Apply local overrides (unless --no-overrides)
+	noOverrides, _ := cmd.Flags().GetBool("no-overrides")
+	if !noOverrides {
+		vars, _ = loadEnvWithOverrides(cwd, environment, vars)
+	}
+
+	if len(vars) == 0 {
+		return nil // Silent if empty (like cat on empty file)
+	}
+
+	// Sort keys for consistent output
+	keys := make([]string, 0, len(vars))
+	for k := range vars {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	// Check if we should colorize
+	useColor := tui.IsStdoutTerminal()
+
+	for _, k := range keys {
+		v := vars[k]
+		if useColor {
+			// Green key, reset, value
+			fmt.Printf("\033[32m%s\033[0m=%s\n", k, v)
+		} else {
+			fmt.Printf("%s=%s\n", k, v)
+		}
 	}
 
 	return nil

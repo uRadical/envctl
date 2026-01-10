@@ -28,9 +28,10 @@ You can also add peers manually using their address.`,
 }
 
 var peersListCmd = &cobra.Command{
-	Use:   "list",
-	Short: "List connected peers",
-	RunE:  runPeersList,
+	Use:     "list",
+	Aliases: []string{"ls"},
+	Short:   "List connected peers",
+	RunE:    runPeersList,
 }
 
 func runPeersList(cmd *cobra.Command, args []string) error {
