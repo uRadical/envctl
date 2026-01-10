@@ -10,6 +10,7 @@ Zero-infrastructure secrets sharing for dev teams — encrypted, peer-to-peer, n
 - **Peer-to-peer** — No server, no cloud, your secrets stay local
 - **Cryptographic team membership** — Blockchain-based team verification
 - **Variable-level redaction** — Choose exactly what to share
+- **CI/CD integration** — Offline encrypted bundles for pipelines
 - **Works everywhere** — LAN, VPN, or Tailscale
 - **Cross-platform** — Linux, macOS, Windows
 
@@ -149,6 +150,38 @@ View who changed what and when:
 envctl env var log
 envctl env var log --key API_KEY
 ```
+
+## CI/CD Integration
+
+Use secrets in CI pipelines without network access to teammates or relay servers.
+
+### Generate CI Keypair
+
+```bash
+envctl ci keygen
+# Public key saved to .envctl/ci_pubkey (commit this)
+# Private key displayed once - store in CI platform secrets
+```
+
+### Export Encrypted Bundle
+
+```bash
+envctl ci export -e prod -o .envctl/prod.enc
+git add .envctl/ci_pubkey .envctl/prod.enc
+git commit -m "Add CI secrets bundle"
+```
+
+### Use in CI Pipelines
+
+```yaml
+# GitHub Actions example
+- name: Run tests with secrets
+  env:
+    ENVCTL_CI_KEY: ${{ secrets.ENVCTL_CI_KEY }}
+  run: envctl ci apply -b .envctl/prod.enc -- npm test
+```
+
+The bundle uses ML-KEM-768 post-quantum encryption. Any team admin can export bundles without needing the CI private key.
 
 ## Shell Integration
 
@@ -397,6 +430,10 @@ envctl
 │   ├── list (ls)           # Connected peers
 │   ├── add <addr>          # Add peer manually
 │   └── saved               # Show saved peers
+├── ci
+│   ├── keygen              # Generate CI keypair
+│   ├── export              # Export encrypted bundle
+│   └── apply               # Run with CI secrets
 ├── verify <peer>           # SAS verification
 ├── status                  # Show current status
 ├── whoami                  # Show identity
