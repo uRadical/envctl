@@ -371,7 +371,7 @@ envctl
 ├── project (alias: team)
 │   ├── create <name>       # Create project
 │   ├── join <code>         # Join with invite code
-│   ├── list                # List projects
+│   ├── list (ls)           # List projects
 │   ├── members             # List members
 │   ├── invite              # Invite member
 │   ├── remove              # Remove member
@@ -383,17 +383,18 @@ envctl
 │   ├── link                # Link directory to project
 │   └── env                 # Manage environments
 ├── env
-│   ├── list                # List environments
+│   ├── list (ls)           # List environments
 │   ├── use <name>          # Switch environment
+│   ├── cat                 # Print variables to stdout
 │   ├── current             # Show current
 │   └── var
-│       ├── list            # List variables
+│       ├── list (ls)       # List variables
 │       ├── get <key>       # Get variable
 │       ├── set <key=val>   # Set variable
 │       ├── delete <key>    # Delete variable
 │       └── log             # Variable history
 ├── peers
-│   ├── list                # Connected peers
+│   ├── list (ls)           # Connected peers
 │   ├── add <addr>          # Add peer manually
 │   └── saved               # Show saved peers
 ├── verify <peer>           # SAS verification
