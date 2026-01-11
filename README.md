@@ -35,6 +35,30 @@ envctl env var set DATABASE_URL=postgres://localhost/myapp
 
 ## Installation
 
+### macOS / Linux
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/uradical/envctl/main/install.sh | sh
+```
+
+Or manually:
+
+```bash
+# Determine your OS and architecture
+OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+ARCH=$(uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/')
+VERSION=$(curl -s https://api.github.com/repos/uradical/envctl/releases/latest | grep tag_name | cut -d '"' -f 4)
+
+# Download and install
+curl -LO "https://github.com/uradical/envctl/releases/download/${VERSION}/envctl_${VERSION#v}_${OS}_${ARCH}.tar.gz"
+tar xzf envctl_${VERSION#v}_${OS}_${ARCH}.tar.gz
+sudo mv envctl /usr/local/bin/
+```
+
+### Windows
+
+Download from the [releases page](https://github.com/uradical/envctl/releases/latest) and add to your PATH.
+
 ### From Source
 
 Requires Go 1.23 or later:
@@ -44,10 +68,6 @@ git clone https://github.com/uradical/envctl
 cd envctl
 make install
 ```
-
-### Binary Releases
-
-Download from the [releases page](https://github.com/uradical/envctl/releases).
 
 ## Setup
 
